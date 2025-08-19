@@ -1,0 +1,162 @@
+default_platform(:android)
+
+platform :android do
+  desc "Build RC version for Play Internal Testing"
+  lane :build_rc do |options|
+    version = options[:version] || "0.1.0"
+    build_number = options[:build_number] || "1"
+    
+    # Update version name and code
+    android_set_version_name(version_name: version)
+    android_set_version_code(version_code: build_number.to_i)
+    
+    # Build the AAB
+    gradle(
+      task: "bundle",
+      build_type: "Release",
+      project_dir: "app/",
+      properties: {
+        "android.injected.signing.store.file" => "release.keystore",
+        "android.injected.signing.store.password" => ENV["ANDROID_KEYSTORE_PASSWORD"],
+        "android.injected.signing.key.alias" => ENV["ANDROID_KEY_ALIAS"],
+        "android.injected.signing.key.password" => ENV["ANDROID_KEY_PASSWORD"],
+      }
+    )
+    
+    # Upload to Play Console Internal Testing
+    upload_to_play_store(
+      track: "internal",
+      aab: "app/build/outputs/bundle/release/app-release.aab",
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true
+    )
+  end
+  
+  desc "Build production version"
+  lane :build_production do |options|
+    version = options[:version] || "0.1.0"
+    build_number = options[:build_number] || "1"
+    
+    # Update version name and code
+    android_set_version_name(version_name: version)
+    android_set_version_code(version_code: build_number.to_i)
+    
+    # Build the AAB
+    gradle(
+      task: "bundle",
+      build_type: "Release",
+      project_dir: "app/",
+      properties: {
+        "android.injected.signing.store.file" => "release.keystore",
+        "android.injected.signing.store.password" => ENV["ANDROID_KEYSTORE_PASSWORD"],
+        "android.injected.signing.key.alias" => ENV["ANDROID_KEY_ALIAS"],
+        "android.injected.signing.key.password" => ENV["ANDROID_KEY_PASSWORD"],
+      }
+    )
+    
+    # Upload to Play Console Production
+    upload_to_play_store(
+      track: "production",
+      aab: "app/build/outputs/bundle/release/app-release.aab",
+      skip_upload_metadata: false,
+      skip_upload_images: false,
+      skip_upload_screenshots: false
+    )
+  end
+  
+  desc "Just build without uploading"
+  lane :build do |options|
+    version = options[:version] || "0.1.0"
+    build_number = options[:build_number] || "1"
+    
+    # Update version name and code
+    android_set_version_name(version_name: version)
+    android_set_version_code(version_code: build_number.to_i)
+    
+    # Build the AAB
+    gradle(
+      task: "bundle",
+      build_type: "Release",
+      project_dir: "app/",
+      properties: {
+        "android.injected.signing.store.file" => "release.keystore",
+        "android.injected.signing.store.password" => ENV["ANDROID_KEYSTORE_PASSWORD"],
+        "android.injected.signing.key.alias" => ENV["ANDROID_KEY_ALIAS"],
+        "android.injected.signing.key.password" => ENV["ANDROID_KEY_PASSWORD"],
+      }
+    )
+  end
+  
+  desc "Deploy to alpha track"
+  lane :alpha do |options|
+    version = options[:version] || "0.1.0"
+    build_number = options[:build_number] || "1"
+    
+    build_rc(version: version, build_number: build_number)
+    
+    upload_to_play_store(
+      track: "alpha",
+      aab: "app/build/outputs/bundle/release/app-release.aab"
+    )
+  end
+  
+  desc "Deploy to beta track"
+  lane :beta do |options|
+    version = options[:version] || "0.1.0"
+    build_number = options[:build_number] || "1"
+    
+    build_rc(version: version, build_number: build_number)
+    
+    upload_to_play_store(
+      track: "beta",
+      aab: "app/build/outputs/bundle/release/app-release.aab"
+    )
+  end
+  
+  desc "Promote from beta to production"
+  lane :promote_to_production do
+    upload_to_play_store(
+      track: "beta",
+      track_promote_to: "production"
+    )
+  end
+  
+  desc "Update metadata only"
+  lane :update_metadata do
+    upload_to_play_store(
+      skip_upload_aab: true,
+      skip_upload_apk: true
+    )
+  end
+  
+  desc "Take screenshots"
+  lane :screenshots do
+    capture_android_screenshots
+  end
+  
+  # Error handling
+  error do |lane, exception|
+    puts "Error in lane #{lane}: #{exception.message}"
+    
+    # Notify team of build failure
+    slack(
+      message: "Android build failed in lane #{lane}: #{exception.message}",
+      success: false,
+      channel: "#ci-cd",
+      payload: {
+        "Build" => ENV["BUILD_NUMBER"] || "unknown",
+        "Lane" => lane.to_s
+      },
+      default_payloads: [:lane, :test_result, :git_branch, :git_author],
+      attachment_properties: {
+        thumb_url: "https://example.com/error-icon.png",
+        fields: [{
+          title: "Error",
+          value: exception.message,
+          short: false
+        }]
+      }
+    ) if ENV["SLACK_URL"]
+  end
+end

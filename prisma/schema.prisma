@@ -1,0 +1,142 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User accounts for Canvas
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  avatar    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  workspaces Workspace[]
+  documents  Document[]
+  sessions   UserSession[]
+
+  @@map("users")
+}
+
+// Workspaces - containers for user's documents
+model Workspace {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  owner   User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  ownerId String
+
+  documents Document[]
+
+  @@map("workspaces")
+}
+
+// Documents - individual files/pages
+model Document {
+  id        String   @id @default(cuid())
+  title     String
+  slug      String
+  content   Json?    // Block-based content stored as JSON
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+
+  author   User   @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  authorId String
+
+  blocks Block[]
+
+  @@unique([workspaceId, slug])
+  @@map("documents")
+}
+
+// Individual content blocks within documents
+model Block {
+  id         String    @id @default(cuid())
+  type       BlockType
+  content    Json?     // Block-specific content
+  position   Int       // Order within document
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  // Relations
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  documentId String
+
+  @@map("blocks")
+}
+
+// User sessions for passwordless auth
+model UserSession {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  // Relations
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+
+  @@map("user_sessions")
+}
+
+// Analytics for tracking user behavior
+model AnalyticsEvent {
+  id        String   @id @default(cuid())
+  event     String   // event name
+  userId    String?  // optional user ID
+  sessionId String?  // session identifier
+  data      Json?    // event-specific data
+  timestamp DateTime @default(now())
+
+  @@map("analytics_events")
+}
+
+// AI interactions and queries
+model AIInteraction {
+  id        String   @id @default(cuid())
+  userId    String?
+  type      AIInteractionType
+  query     String
+  response  String?
+  context   Json?    // Additional context data
+  createdAt DateTime @default(now())
+
+  @@map("ai_interactions")
+}
+
+// Enums
+enum BlockType {
+  PARAGRAPH
+  HEADING_1
+  HEADING_2
+  HEADING_3
+  BULLET_LIST
+  NUMBERED_LIST
+  QUOTE
+  DIVIDER
+}
+
+enum AIInteractionType {
+  COMMAND_CENTER_QUERY
+  SPELL_CHECK
+  GRAMMAR_CHECK
+  CONTENT_SUGGESTION
+  RESEARCH_QUERY
+}

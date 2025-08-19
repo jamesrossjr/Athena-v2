@@ -1,0 +1,31 @@
+{
+  "git": {
+    "commitMessage": "chore: release v${version}",
+    "tagName": "v${version}",
+    "getLatestTagFromAllRefs": true
+  },
+  "github": {
+    "release": true,
+    "releaseName": "Canvas MVP v${version}",
+    "releaseNotes": "npx conventional-changelog --preset angular --output-unreleased"
+  },
+  "npm": {
+    "publish": false
+  },
+  "hooks": {
+    "before:init": [
+      "pnpm lint",
+      "pnpm typecheck", 
+      "pnpm test:ci"
+    ],
+    "after:release": [
+      "echo Successfully released Canvas MVP v${version}"
+    ]
+  },
+  "plugins": {
+    "@release-it/conventional-changelog": {
+      "preset": "angular",
+      "infile": "CHANGELOG.md"
+    }
+  }
+}

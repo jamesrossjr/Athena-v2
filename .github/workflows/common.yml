@@ -1,0 +1,96 @@
+name: Common CI
+
+on:
+  push:
+    branches: [main, release/*]
+  pull_request:
+    branches: [main]
+
+env:
+  NODE_VERSION: '20'
+  PNPM_VERSION: '9'
+
+jobs:
+  lint-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type checking
+        run: pnpm typecheck
+
+      - name: Lint check
+        run: pnpm lint
+
+      - name: Format check
+        run: pnpm format:check
+
+      - name: Unit & integration tests
+        run: pnpm test:ci
+
+      - name: Security audit
+        run: pnpm audit --audit-level moderate
+
+      - name: Build application
+        run: pnpm build
+        env:
+          NODE_ENV: production
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuxt-build-${{ github.sha }}
+          path: .output/
+          retention-days: 30
+
+  dependency-review:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: moderate
+
+  build-info:
+    runs-on: ubuntu-latest
+    outputs:
+      build-id: ${{ steps.build-info.outputs.build-id }}
+      version: ${{ steps.build-info.outputs.version }}
+      
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Generate build info
+        id: build-info
+        run: |
+          BUILD_ID=$(date +'%Y%m%d')-$(printf "%03d" ${{ github.run_number }})
+          VERSION=$(grep -o '"version": "[^"]*"' package.json | cut -d'"' -f4)
+          echo "build-id=$BUILD_ID" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Build ID: $BUILD_ID"
+          echo "Version: $VERSION"

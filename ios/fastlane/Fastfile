@@ -1,0 +1,143 @@
+default_platform(:ios)
+
+platform :ios do
+  desc "Build RC version for TestFlight"
+  lane :build_rc do |options|
+    version = options[:version] || "0.1.0"
+    build_number = options[:build_number] || "1"
+    
+    setup_ci
+    
+    # Update version and build number
+    increment_version_number(version_number: version)
+    increment_build_number(build_number: build_number)
+    
+    # Match certificates and provisioning profiles
+    match(type: "appstore")
+    
+    # Build the app
+    build_app(
+      scheme: "App",
+      configuration: "Release",
+      export_method: "app-store",
+      output_directory: "./build",
+      output_name: "CanvasMVP-#{version}-#{build_number}.ipa",
+      include_bitcode: false,
+      include_symbols: true
+    )
+    
+    # Upload to TestFlight
+    upload_to_testflight(
+      skip_waiting_for_build_processing: true,
+      skip_submission: true,
+      distribute_external: false,
+      groups: ["Internal Testers"]
+    )
+  end
+  
+  desc "Build production version"
+  lane :build_production do |options|
+    version = options[:version] || "0.1.0"
+    build_number = options[:build_number] || "1"
+    
+    setup_ci
+    
+    # Update version and build number
+    increment_version_number(version_number: version)
+    increment_build_number(build_number: build_number)
+    
+    # Match certificates and provisioning profiles
+    match(type: "appstore")
+    
+    # Build the app
+    build_app(
+      scheme: "App",
+      configuration: "Release",
+      export_method: "app-store",
+      output_directory: "./build",
+      output_name: "CanvasMVP-#{version}.ipa",
+      include_bitcode: false,
+      include_symbols: true
+    )
+    
+    # Upload to App Store Connect
+    upload_to_app_store(
+      force: true,
+      submit_for_review: false,
+      automatic_release: false,
+      skip_metadata: false,
+      skip_screenshots: false,
+      precheck_include_in_app_purchases: false
+    )
+  end
+  
+  desc "Just build without uploading"
+  lane :build do |options|
+    version = options[:version] || "0.1.0"
+    build_number = options[:build_number] || "1"
+    
+    setup_ci
+    
+    # Update version and build number
+    increment_version_number(version_number: version)
+    increment_build_number(build_number: build_number)
+    
+    # Match certificates and provisioning profiles
+    match(type: "appstore")
+    
+    # Build the app
+    build_app(
+      scheme: "App",
+      configuration: "Release",
+      export_method: "app-store",
+      output_directory: "./build",
+      output_name: "CanvasMVP-#{version}-#{build_number}.ipa",
+      include_bitcode: false,
+      include_symbols: true
+    )
+  end
+  
+  desc "Setup certificates and provisioning profiles"
+  lane :setup_certs do
+    match(type: "development")
+    match(type: "appstore")
+  end
+  
+  desc "Take screenshots"
+  lane :screenshots do
+    capture_screenshots
+  end
+  
+  desc "Update metadata"
+  lane :update_metadata do
+    upload_to_app_store(
+      skip_binary_upload: true,
+      skip_screenshots: true
+    )
+  end
+  
+  # Error handling
+  error do |lane, exception|
+    puts "Error in lane #{lane}: #{exception.message}"
+    
+    # Notify team of build failure
+    slack(
+      message: "iOS build failed in lane #{lane}: #{exception.message}",
+      success: false,
+      channel: "#ci-cd",
+      payload: {
+        "Build" => ENV["BUILD_NUMBER"] || "unknown",
+        "Lane" => lane.to_s
+      },
+      default_payloads: [:lane, :test_result, :git_branch, :git_author],
+      attachment_properties: {
+        thumb_url: "https://example.com/error-icon.png",
+        fields: [{
+          title: "Error",
+          value: exception.message,
+          short: false
+        }]
+      }
+    ) if ENV["SLACK_URL"]
+  end
+end

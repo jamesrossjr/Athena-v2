@@ -1,0 +1,338 @@
+name: Production Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.*'
+      - '!v*-rc.*'  # Exclude RC tags
+
+env:
+  NODE_VERSION: '20'
+  PNPM_VERSION: '9'
+
+jobs:
+  validate-tag:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      is-prerelease: ${{ steps.version.outputs.is-prerelease }}
+      
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Validate version tag
+        id: version
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          VERSION=${TAG#v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          
+          # Check if this is a prerelease (contains alpha, beta, rc, etc.)
+          if [[ $VERSION =~ (alpha|beta|rc|next|dev) ]]; then
+            echo "is-prerelease=true" >> $GITHUB_OUTPUT
+          else
+            echo "is-prerelease=false" >> $GITHUB_OUTPUT
+          fi
+          
+          # Validate that package.json version matches tag
+          PACKAGE_VERSION=$(grep -o '"version": "[^"]*"' package.json | cut -d'"' -f4)
+          if [[ "$VERSION" != "$PACKAGE_VERSION" ]]; then
+            echo "❌ Version mismatch: tag=$VERSION, package.json=$PACKAGE_VERSION"
+            exit 1
+          fi
+          
+          echo "✅ Version validated: $VERSION"
+
+  deploy-web:
+    runs-on: ubuntu-latest
+    needs: validate-tag
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run production tests
+        run: pnpm test:ci
+
+      - name: Build for production
+        run: pnpm build
+        env:
+          NODE_ENV: production
+          NUXT_APP_VERSION: ${{ needs.validate-tag.outputs.version }}
+
+      - name: Deploy to Vercel
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          vercel-args: '--prod'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload production build
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-web-${{ needs.validate-tag.outputs.version }}
+          path: .output/
+
+  db-migrate:
+    runs-on: ubuntu-latest
+    needs: [validate-tag, deploy-web]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm db:generate
+
+      - name: Backup database
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+        run: |
+          echo "🔄 Creating database backup before migration..."
+          # Add your backup strategy here (e.g., pg_dump for PostgreSQL)
+
+      - name: Run database migrations
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+        run: |
+          echo "🔄 Running database migrations..."
+          pnpm db:migrate
+
+      - name: Verify database health
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+        run: |
+          echo "🔍 Verifying database health..."
+          # Add health checks here
+
+  smoke-test:
+    runs-on: ubuntu-latest
+    needs: [validate-tag, deploy-web, db-migrate]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run production smoke tests
+        env:
+          PROD_URL: ${{ secrets.PROD_URL }}
+        run: |
+          echo "🔍 Running production smoke tests..."
+          # Add your smoke test commands here
+          curl -f "$PROD_URL/health" || exit 1
+          echo "✅ Basic health check passed"
+
+  changelog-and-version:
+    runs-on: ubuntu-latest
+    needs: [validate-tag, smoke-test]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate changelog
+        run: |
+          echo "📝 Generating changelog..."
+          pnpm changelog
+
+      - name: Setup Git
+        run: |
+          git config user.name "release-bot"
+          git config user.email "release-bot@canvas-mvp.com"
+
+      - name: Commit changelog and bump version
+        run: |
+          git add CHANGELOG.md
+          git commit -m "chore: release ${{ github.ref_name }} - generate changelog" || true
+          
+          # Bump to next development version
+          if [[ "${{ needs.validate-tag.outputs.is-prerelease }}" == "false" ]]; then
+            echo "🔄 Bumping to next development version..."
+            npm version prerelease --preid next -m "chore: start next dev cycle %s"
+            git push origin main --tags
+          fi
+
+  create-github-release:
+    runs-on: ubuntu-latest
+    needs: [validate-tag, changelog-and-version]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "Canvas MVP ${{ needs.validate-tag.outputs.version }}"
+          body: |
+            ## 🚀 Canvas MVP ${{ needs.validate-tag.outputs.version }}
+            
+            ### 🌟 What's New
+            
+            See [CHANGELOG.md](./CHANGELOG.md) for detailed changes.
+            
+            ### 📱 App Store Links
+            
+            - **iOS:** App Store (pending review)
+            - **Android:** Google Play (pending review)
+            - **Web:** [canvas-mvp.com](https://canvas-mvp.com)
+            
+            ### 🛠️ Technical Details
+            
+            - **Build Date:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+            - **Commit:** ${{ github.sha }}
+            - **Node.js:** ${{ env.NODE_VERSION }}
+            
+            ---
+            
+            🎉 **Thank you to all contributors who made this release possible!**
+          draft: false
+          prerelease: ${{ needs.validate-tag.outputs.is-prerelease == 'true' }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  notify:
+    runs-on: ubuntu-latest
+    needs: [validate-tag, create-github-release]
+    if: always()
+    
+    steps:
+      - name: Notify Slack (Success)
+        if: needs.create-github-release.result == 'success'
+        uses: 8398a7/action-slack@v3
+        with:
+          status: success
+          custom_payload: |
+            {
+              "text": "🚀 Canvas MVP ${{ needs.validate-tag.outputs.version }} deployed successfully!",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*🚀 Canvas MVP ${{ needs.validate-tag.outputs.version }} is now live!*"
+                  }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Version:*\n${{ needs.validate-tag.outputs.version }}"
+                    },
+                    {
+                      "type": "mrkdwn", 
+                      "text": "*Environment:*\nProduction"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Web App:*\n<https://canvas-mvp.com|canvas-mvp.com>"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Release Notes:*\n<${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ github.ref_name }}|View on GitHub>"
+                    }
+                  ]
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+
+      - name: Notify Slack (Failure)
+        if: failure()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: failure
+          custom_payload: |
+            {
+              "text": "❌ Canvas MVP ${{ needs.validate-tag.outputs.version }} deployment failed",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn", 
+                    "text": "*❌ Canvas MVP ${{ needs.validate-tag.outputs.version }} deployment failed*"
+                  }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Version:*\n${{ needs.validate-tag.outputs.version }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Workflow:*\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Logs>"
+                    }
+                  ]
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
