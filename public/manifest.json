@@ -1,0 +1,26 @@
+{
+  "name": "Canvas - Digital Workspace",
+  "short_name": "Canvas",
+  "description": "The fastest, most intuitive digital workspace. Minimalist block-based editor with AI co-pilot.",
+  "theme_color": "#000000",
+  "background_color": "#ffffff",
+  "display": "standalone",
+  "start_url": "/",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "32x32",
+      "type": "image/x-icon"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ]
+}

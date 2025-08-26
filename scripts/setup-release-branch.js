@@ -103,7 +103,7 @@ function createReleaseBranch() {
       exec(`git push origin --delete ${branchName}`, { stdio: 'pipe' }).catch(() => {
         // Ignore error if remote branch doesn't exist
       })
-    } catch (error) {
+    } catch {
       // Branch doesn't exist, which is what we want
     }
 

@@ -71,6 +71,7 @@ model Block {
   id         String    @id @default(cuid())
   type       BlockType
   content    Json?     // Block-specific content
+  metadata   Json?     // Block metadata (styling, settings, etc.)
   position   Int       // Order within document
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
@@ -78,8 +79,31 @@ model Block {
   // Relations
   document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
   documentId String
+  
+  mediaAssets MediaAsset[]
 
   @@map("blocks")
+}
+
+// Media assets for rich content blocks
+model MediaAsset {
+  id        String   @id @default(cuid())
+  filename  String
+  mimeType  String
+  size      Int      // Size in bytes
+  url       String   // Storage URL
+  thumbnail String?  // Thumbnail URL for images/videos
+  alt       String?  // Alt text for accessibility
+  caption   String?  // Optional caption
+  metadata  Json?    // File-specific metadata
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  block   Block?  @relation(fields: [blockId], references: [id], onDelete: Cascade)
+  blockId String?
+
+  @@map("media_assets")
 }
 
 // User sessions for passwordless auth
@@ -131,6 +155,20 @@ enum BlockType {
   NUMBERED_LIST
   QUOTE
   DIVIDER
+  CODE_BLOCK
+  IMAGE
+  VIDEO
+  AUDIO
+  EMBED
+  TABLE
+  LINK_PREVIEW
+  FILE
+  CALLOUT
+  TOGGLE
+  MATH
+  CHART
+  BOOKMARK
+  TEMPLATE
 }
 
 enum AIInteractionType {
@@ -139,4 +177,8 @@ enum AIInteractionType {
   GRAMMAR_CHECK
   CONTENT_SUGGESTION
   RESEARCH_QUERY
+  CODE_COMPLETION
+  IMAGE_GENERATION
+  TABLE_GENERATION
+  CONTENT_SUMMARIZATION
 }

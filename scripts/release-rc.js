@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { execSync } from 'child_process'
-import { readFileSync, writeFileSync } from 'fs'
+import { readFileSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 
@@ -107,7 +107,7 @@ function triggerGitHubActionRC(rcNumber) {
     exec(`gh workflow run rc.yml -f rc_number=${rcNumber}`)
     log('✅ GitHub Actions RC workflow triggered', 'green')
     log('🔗 Check progress at: https://github.com/your-org/canvas-mvp/actions', 'cyan')
-  } catch (error) {
+  } catch {
     log('❌ Failed to trigger GitHub Actions workflow', 'red')
     log('ℹ️  You can manually trigger it from the GitHub UI', 'yellow')
   }

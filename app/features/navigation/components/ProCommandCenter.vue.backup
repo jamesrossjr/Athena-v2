@@ -1,0 +1,2717 @@
+<!--
+  Professional Command Center - Production Ready Enhanced
+
+  Features:
+  - Instant search with 0ms perceived latency
+  - Professional keyboard navigation
+  - Smooth animations and micro-interactions
+  - Advanced AI conversation interface
+  - Intelligent intent detection system
+  - Predictive suggestions and learning
+  - Voice command integration
+  - Multi-mode interface (Search/AI/Commands)
+  - Context-aware recommendations
+  - Production-grade performance
+  - Accessible design
+-->
+
+<template>
+  <teleport to="body">
+    <transition
+      enter-active-class="transition-all duration-200 ease-out"
+      enter-from-class="opacity-0 scale-95"
+      enter-to-class="opacity-100 scale-100"
+      leave-active-class="transition-all duration-150 ease-in"
+      leave-from-class="opacity-100 scale-100"
+      leave-to-class="opacity-0 scale-95"
+    >
+      <div
+        v-if="isOpen"
+        class="fixed inset-0 z-[9999] flex items-start justify-center pt-[10vh]"
+        @click="handleBackdropClick"
+        @keydown="handleKeyDown"
+      >
+        <!-- Professional backdrop -->
+        <div class="absolute inset-0 bg-black/20 backdrop-blur-sm" />
+
+        <!-- Command Center -->
+        <div
+          ref="panelRef"
+          class="relative w-full max-w-2xl h-[80vh] max-h-[600px] mx-4 bg-white/95 backdrop-blur-xl rounded-xl shadow-2xl border border-gray-200/50 overflow-hidden flex flex-col"
+          @click.stop
+        >
+          <!-- Enhanced Header with Mode Switching -->
+          <div class="relative">
+            <!-- Mode Toggle (Professional Pills) -->
+            <div
+              v-if="showModeToggle"
+              class="flex items-center justify-between px-4 py-2 bg-gray-50/80 border-b border-gray-100/60"
+            >
+              <div class="flex items-center space-x-1">
+                <button
+                  v-for="mode in modes"
+                  :key="mode.key"
+                  :class="[
+                    'flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all',
+                    currentMode === mode.key
+                      ? 'bg-white text-gray-900 shadow-sm border border-gray-200/50'
+                      : 'text-gray-600 hover:bg-white/50 hover:text-gray-800'
+                  ]"
+                  @click="switchMode(mode.key)"
+                >
+                  <span class="text-xs">{{ mode.icon }}</span>
+                  <span>{{ mode.label }}</span>
+                </button>
+              </div>
+
+              <!-- Voice Control Toggle -->
+              <button
+                v-if="voiceSupported"
+                :class="[
+                  'flex items-center space-x-1 px-2 py-1 rounded-lg text-xs transition-colors',
+                  isVoiceListening ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                ]"
+                @click="toggleVoiceCommand"
+              >
+                <span>{{ isVoiceListening ? '🔴' : '🎤' }}</span>
+                <span>{{ isVoiceListening ? 'Listening...' : 'Voice' }}</span>
+              </button>
+            </div>
+
+            <!-- Enhanced Input with Intent Detection -->
+            <div class="flex items-center px-4 py-3 border-b border-gray-100/80">
+              <!-- Intelligent Icon with Intent Indicator -->
+              <div class="flex items-center justify-center w-6 h-6 mr-3 flex-shrink-0">
+                <div
+                  v-if="isLoading || isProcessingAI"
+                  class="w-4 h-4 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin"
+                />
+                <div
+                  v-else
+                  :class="[
+                    'w-6 h-6 rounded-lg flex items-center justify-center transition-all',
+                    intentIndicatorClass
+                  ]"
+                >
+                  <component
+                    :is="currentIcon"
+                    class="w-4 h-4 transition-colors"
+                  />
+                </div>
+              </div>
+
+              <!-- Universal Input Field -->
+              <input
+                ref="inputRef"
+                v-model="query"
+                type="text"
+                :placeholder="dynamicPlaceholder"
+                class="flex-1 bg-transparent text-base placeholder-gray-400 border-none outline-none"
+                autocomplete="off"
+                spellcheck="false"
+                @input="handleInput"
+                @keydown="handleInputKeyDown"
+              >
+
+              <!-- AI Processing Indicator -->
+              <div
+                v-if="isProcessingAI"
+                class="mr-3 flex items-center space-x-1"
+              >
+                <div class="w-2 h-2 bg-blue-400 rounded-full animate-pulse" />
+                <span class="text-xs text-blue-600">AI thinking...</span>
+              </div>
+
+              <!-- Multi-Intent Confidence Indicators -->
+              <div
+                v-if="detectedIntents.length > 1 && query.trim()"
+                class="flex items-center space-x-1 mr-2 text-xs"
+              >
+                <div
+                  v-for="intent in detectedIntents.slice(0, 3)"
+                  :key="intent.intent"
+                  :class="[
+                    'px-1.5 py-0.5 rounded-lg border text-xs font-medium transition-all',
+                    intent.confidence > 0.8 ? 'bg-green-100 border-green-200 text-green-700'
+                    : intent.confidence > 0.6 ? 'bg-blue-100 border-blue-200 text-blue-700'
+                      : 'bg-gray-100 border-gray-200 text-gray-600'
+                  ]"
+                  :title="`${intent.intent} (${Math.round(intent.confidence * 100)}%)`"
+                >
+                  {{ intent.intent }}
+                </div>
+              </div>
+
+              <!-- Settings Button -->
+              <button
+                class="flex items-center justify-center w-8 h-8 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors ml-2"
+                @click="toggleSettings"
+                title="Settings"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              </button>
+
+              <!-- Enhanced Keyboard Hints -->
+              <div class="flex items-center space-x-1 ml-3 text-xs text-gray-400">
+                <kbd class="px-1.5 py-0.5 bg-gray-100 rounded text-xs">Tab</kbd>
+                <span class="text-gray-300">|</span>
+                <kbd class="px-1.5 py-0.5 bg-gray-100 rounded text-xs">Esc</kbd>
+              </div>
+            </div>
+          </div>
+
+          <!-- Results Container -->
+          <div class="flex-1 overflow-hidden">
+            <div class="h-full overflow-y-auto scrollbar-hide">
+            <!-- AI Conversation Interface -->
+            <div
+              v-if="currentMode === 'ai' && aiConversation.length"
+              class="p-4 space-y-4"
+            >
+              <div
+                v-for="message in aiConversation"
+                :key="message.id"
+                :class="[
+                  'flex space-x-3',
+                  message.role === 'user' ? 'justify-end' : 'justify-start'
+                ]"
+              >
+                <!-- AI Avatar (Professional Style) -->
+                <div
+                  v-if="message.role === 'assistant'"
+                  class="w-7 h-7 bg-gradient-to-br from-blue-100 to-blue-200 rounded-lg flex items-center justify-center shadow-sm"
+                >
+                  <span class="text-sm">🤖</span>
+                </div>
+
+                <!-- Message Content (Professional Design) -->
+                <div
+                  :class="[
+                    'max-w-xs lg:max-w-md px-3 py-2.5 rounded-xl shadow-sm border',
+                    message.role === 'user'
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-white text-gray-900 border-gray-200'
+                  ]"
+                >
+                  <div
+                    class="text-sm leading-relaxed"
+                    v-html="formatMessage(message.content)"
+                  />
+
+                  <!-- AI Action Buttons (Professional Style) -->
+                  <div
+                    v-if="message.actions && message.actions.length"
+                    class="flex flex-wrap gap-2 mt-3"
+                  >
+                    <button
+                      v-for="action in message.actions"
+                      :key="action.id"
+                      :class="[
+                        'px-3 py-1.5 text-xs font-medium rounded-lg border transition-all hover:scale-105',
+                        message.role === 'user'
+                          ? 'border-white/20 hover:bg-white/10 text-white'
+                          : 'border-gray-300 hover:bg-gray-50 text-gray-700 hover:border-gray-400'
+                      ]"
+                      @click="executeAIAction(action)"
+                    >
+                      {{ action.label }}
+                    </button>
+                  </div>
+                </div>
+
+                <!-- User Avatar -->
+                <div
+                  v-if="message.role === 'user'"
+                  class="w-7 h-7 bg-gradient-to-br from-gray-100 to-gray-200 rounded-lg flex items-center justify-center shadow-sm"
+                >
+                  <span class="text-sm">👤</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Contextual Zero-State Dashboard -->
+            <div
+              v-else-if="!query && currentMode === 'search'"
+              class="py-4"
+            >
+              <!-- Quick Actions Section -->
+              <div
+                v-if="dashboardData.quickActions.length > 0"
+                class="mb-6"
+              >
+                <div class="px-4 pb-3 flex items-center justify-between">
+                  <h3 class="text-sm font-semibold text-gray-900 flex items-center">
+                    <span class="mr-2">⚡</span>
+                    Quick Actions
+                  </h3>
+                  <div class="text-xs text-gray-500">
+                    {{ dashboardData.temporalContext.timeOfDay }} • {{ dashboardData.temporalContext.dayOfWeek }}
+                  </div>
+                </div>
+                <div class="grid grid-cols-1 gap-2 px-2">
+                  <button
+                    v-for="action in dashboardData.quickActions.slice(0, 3)"
+                    :key="action.id"
+                    class="w-full flex items-center px-3 py-3 rounded-xl text-left transition-all hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:shadow-sm group border border-transparent hover:border-blue-200/50"
+                    @click="executeDashboardAction(action)"
+                  >
+                    <div class="w-10 h-10 mr-3 rounded-xl bg-gradient-to-br from-blue-100 to-blue-200 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
+                      <span class="text-lg">{{ action.icon }}</span>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                      <div class="font-semibold text-sm text-gray-900 truncate">
+                        {{ action.title }}
+                      </div>
+                      <div class="text-xs text-gray-600 truncate">
+                        {{ action.description }}
+                      </div>
+                    </div>
+                    <div class="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div
+                        :class="[
+                          'w-2 h-2 rounded-full',
+                          action.confidence > 0.8 ? 'bg-green-400' : action.confidence > 0.6 ? 'bg-blue-400' : 'bg-gray-400'
+                        ]"
+                      />
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Recent Activity Section -->
+              <div
+                v-if="dashboardData.recentActivity.length > 0"
+                class="mb-6"
+              >
+                <div class="px-4 pb-3">
+                  <h3 class="text-sm font-semibold text-gray-900 flex items-center">
+                    <span class="mr-2">📁</span>
+                    Recent Activity
+                  </h3>
+                </div>
+                <div class="space-y-1 px-2">
+                  <button
+                    v-for="(item, index) in dashboardData.recentActivity.slice(0, 5)"
+                    :key="item.id"
+                    :class="[
+                      'w-full flex items-center px-3 py-2.5 rounded-lg text-left transition-all group border border-transparent',
+                      index === selectedIndex && !query ? 'bg-blue-50 border-blue-200' : 'hover:bg-gray-50 hover:border-gray-200'
+                    ]"
+                    @click="executeItem(item)"
+                  >
+                    <div class="w-8 h-8 mr-3 rounded-lg bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center flex-shrink-0">
+                      <span class="text-sm">{{ item.icon }}</span>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                      <div class="font-medium text-sm text-gray-900 truncate">
+                        {{ item.title }}
+                      </div>
+                      <div class="text-xs text-gray-500 truncate flex items-center space-x-2">
+                        <span>{{ item.contextualNote }}</span>
+                        <span
+                          v-if="item.score > 0.8"
+                          class="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs bg-green-100 text-green-800"
+                        >
+                          High Priority
+                        </span>
+                      </div>
+                    </div>
+                    <div class="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <span
+                        :class="[
+                          'text-xs px-2 py-0.5 rounded-full',
+                          item.badge === 'Vue' ? 'bg-green-100 text-green-800'
+                          : item.badge === 'JSON' ? 'bg-yellow-100 text-yellow-800'
+                            : 'bg-gray-100 text-gray-600'
+                        ]"
+                      >
+                        {{ item.badge }}
+                      </span>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Contextual Suggestions Section -->
+              <div
+                v-if="dashboardData.contextualSuggestions.length > 0"
+                class="mb-4"
+              >
+                <div class="px-4 pb-3">
+                  <h3 class="text-sm font-semibold text-gray-900 flex items-center">
+                    <span class="mr-2">🎯</span>
+                    Smart Suggestions
+                  </h3>
+                </div>
+                <div class="space-y-1 px-2">
+                  <button
+                    v-for="suggestion in dashboardData.contextualSuggestions.slice(0, 3)"
+                    :key="suggestion.id"
+                    class="w-full flex items-center px-3 py-2 rounded-lg text-left transition-all hover:bg-purple-50 hover:border-purple-200 group border border-transparent"
+                    @click="executeDashboardSuggestion(suggestion)"
+                  >
+                    <div class="w-7 h-7 mr-3 rounded-lg bg-gradient-to-br from-purple-100 to-purple-200 flex items-center justify-center flex-shrink-0">
+                      <span class="text-sm">{{ suggestion.icon }}</span>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                      <div class="font-medium text-sm text-gray-900 truncate">
+                        {{ suggestion.title }}
+                      </div>
+                      <div class="text-xs text-gray-500 truncate">
+                        {{ suggestion.description }}
+                      </div>
+                    </div>
+                    <div class="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <span class="text-xs text-purple-600 bg-purple-100 px-2 py-0.5 rounded-full">
+                        {{ Math.round(suggestion.confidence * 100) }}%
+                      </span>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Empty State Fallback -->
+              <div
+                v-if="dashboardData.quickActions.length === 0 && dashboardData.recentActivity.length === 0"
+                class="py-12 text-center"
+              >
+                <div class="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-blue-100 to-purple-100 flex items-center justify-center">
+                  <component
+                    :is="currentIcon"
+                    class="w-8 h-8 text-blue-600"
+                  />
+                </div>
+                <h3 class="text-lg font-semibold text-gray-900 mb-2">
+                  Welcome to Pro Command Center
+                </h3>
+                <p class="text-sm text-gray-600 max-w-xs mx-auto mb-4">
+                  Your intelligent workspace that learns and adapts to your workflow
+                </p>
+                <div class="text-xs text-gray-500">
+                  Start by searching, running commands, or asking AI anything
+                </div>
+              </div>
+            </div>
+
+            <!-- Search Results -->
+            <div
+              v-else-if="query"
+              class="py-2"
+            >
+              <!-- High-Performance Loading State -->
+              <div
+                v-if="isLoading || isSearchingActive"
+                class="px-6 py-8 text-center"
+              >
+                <div class="w-6 h-6 mx-auto border-2 border-gray-200 border-t-blue-500 rounded-full animate-spin" />
+                <p class="mt-2 text-sm text-gray-500">
+                  {{ workerReady ? 'Processing in Web Worker...' : 'Searching...' }}
+                </p>
+                <div
+                  v-if="searchTime > 0"
+                  class="mt-1 text-xs text-gray-400"
+                >
+                  Target: &lt;{{ SEARCH_TIME_TARGET }}ms
+                </div>
+              </div>
+
+              <!-- Results -->
+              <div
+                v-else-if="filteredResults.length"
+                class="space-y-1 px-2"
+              >
+                <button
+                  v-for="(result, index) in filteredResults"
+                  :key="result.id"
+                  :class="[
+                    'w-full flex items-center px-3 py-3 rounded-lg text-left transition-all group',
+                    selectedIndex === index
+                      ? 'bg-blue-50 text-blue-700 shadow-sm'
+                      : 'hover:bg-gray-50 text-gray-700'
+                  ]"
+                  @click="executeItem(result)"
+                  @mouseenter="selectedIndex = index"
+                >
+                  <!-- Icon -->
+                  <div
+                    :class="[
+                      'w-10 h-10 mr-3 rounded-lg flex items-center justify-center flex-shrink-0',
+                      result.iconBg || 'bg-gray-100'
+                    ]"
+                  >
+                    <span class="text-base">{{ result.icon }}</span>
+                  </div>
+
+                  <!-- Enhanced Content with Intelligence Indicators -->
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center space-x-2">
+                      <div
+                        class="font-medium text-sm truncate"
+                        v-html="highlightMatch(result.title, query)"
+                      />
+                      <span
+                        v-if="result.badge"
+                        class="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full"
+                      >
+                        {{ result.badge }}
+                      </span>
+                      <!-- Intelligence badges -->
+                      <span
+                        v-if="result.predicted"
+                        class="px-1.5 py-0.5 bg-blue-100 text-blue-600 text-xs rounded"
+                      >
+                        Predicted
+                      </span>
+                      <span
+                        v-if="result.frequent"
+                        class="px-1.5 py-0.5 bg-green-100 text-green-600 text-xs rounded"
+                      >
+                        Frequent
+                      </span>
+                    </div>
+                    <div class="text-xs text-gray-500 truncate mt-0.5">
+                      {{ result.description }}
+                    </div>
+                    <div
+                      v-if="result.path"
+                      class="text-xs text-gray-400 truncate mt-0.5"
+                    >
+                      {{ result.path }}
+                    </div>
+                    <!-- Match details -->
+                    <div
+                      v-if="result.matchType"
+                      class="flex items-center space-x-2 mt-1"
+                    >
+                      <span class="text-xs text-gray-400">{{ result.matchType }} match</span>
+                      <span
+                        v-if="result.confidence"
+                        :class="[
+                          'text-xs px-1 py-0.5 rounded',
+                          result.confidence > 80 ? 'bg-green-100 text-green-600'
+                          : result.confidence > 60 ? 'bg-yellow-100 text-yellow-600'
+                            : 'bg-gray-100 text-gray-600'
+                        ]"
+                      >
+                        {{ result.confidence }}%
+                      </span>
+                    </div>
+                  </div>
+
+                  <!-- Action Hint -->
+                  <div class="opacity-0 group-hover:opacity-100 transition-opacity flex items-center space-x-1">
+                    <kbd class="px-1.5 py-0.5 bg-white border rounded text-xs">↵</kbd>
+                  </div>
+                </button>
+              </div>
+
+              <!-- No Results with Spelling Suggestions -->
+              <div
+                v-else
+                class="px-6 py-8 text-center"
+              >
+                <div class="w-12 h-12 mx-auto mb-4 bg-gray-100 rounded-full flex items-center justify-center">
+                  <SearchIcon class="w-6 h-6 text-gray-400" />
+                </div>
+                <h3 class="text-sm font-medium text-gray-900 mb-1">
+                  No results found
+                </h3>
+                <p class="text-sm text-gray-500 mb-3">
+                  Try a different search term or check spelling
+                </p>
+                <!-- Spelling Suggestions -->
+                <div
+                  v-if="spellingSuggestions.length"
+                  class="space-y-2"
+                >
+                  <p class="text-xs text-gray-500">
+                    Did you mean:
+                  </p>
+                  <div class="flex justify-center space-x-2">
+                    <button
+                      v-for="suggestion in spellingSuggestions"
+                      :key="suggestion"
+                      class="px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm rounded-lg transition-colors"
+                      @click="query = suggestion"
+                    >
+                      {{ suggestion }}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            </div>
+          </div>
+
+          <!-- Performance-Enhanced Footer -->
+          <div
+            v-if="filteredResults.length > 0 || performanceMetrics.totalSearches > 0"
+            class="flex items-center justify-between px-4 py-2 bg-gray-50/80 border-t border-gray-100/80"
+          >
+            <div class="flex items-center space-x-4 text-xs text-gray-500">
+              <span v-if="filteredResults.length">
+                {{ filteredResults.length }} result{{ filteredResults.length === 1 ? '' : 's' }}
+              </span>
+              <span
+                v-if="searchTime > 0"
+                :class="[
+                  searchTime <= SEARCH_TIME_TARGET ? 'text-green-600' : 'text-yellow-600'
+                ]"
+              >
+                {{ Math.round(searchTime) }}ms
+                <span
+                  v-if="searchTime <= SEARCH_TIME_TARGET"
+                  class="text-green-500"
+                >✓</span>
+                <span
+                  v-else
+                  class="text-yellow-500"
+                >⚠</span>
+              </span>
+              <!-- Learning System Status -->
+              <div
+                v-if="learningData.intentAccuracy > 0"
+                class="flex items-center space-x-1"
+              >
+                <div
+                  :class="[
+                    'w-2 h-2 rounded-full',
+                    learningData.intentAccuracy > 0.9 ? 'bg-green-500'
+                    : learningData.intentAccuracy > 0.7 ? 'bg-blue-500' : 'bg-yellow-500'
+                  ]"
+                />
+                <span>AI {{ Math.round(learningData.intentAccuracy * 100) }}%</span>
+              </div>
+
+              <!-- System Status -->
+              <div class="flex items-center space-x-1">
+                <div
+                  :class="[
+                    'w-2 h-2 rounded-full',
+                    workerReady && cacheReady ? 'bg-green-500' : 'bg-yellow-500'
+                  ]"
+                />
+                <span>{{ workerReady && cacheReady ? 'Optimized' : 'Initializing' }}</span>
+              </div>
+            </div>
+            <div class="flex items-center space-x-3 text-xs text-gray-500">
+              <div class="flex items-center space-x-1">
+                <kbd class="px-1 py-0.5 bg-white border rounded">↑↓</kbd>
+                <span>navigate</span>
+              </div>
+              <div class="flex items-center space-x-1">
+                <kbd class="px-1 py-0.5 bg-white border rounded">↵</kbd>
+                <span>select</span>
+              </div>
+              <!-- Performance indicator -->
+              <div
+                v-if="performanceMetrics.averageSearchTime > 0"
+                class="text-xs text-gray-400"
+              >
+                Avg: {{ Math.round(performanceMetrics.averageSearchTime) }}ms
+              </div>
+            </div>
+          </div>
+
+          <!-- Settings Panel -->
+          <div 
+            v-if="showSettings"
+            class="border-t border-gray-100 bg-gray-50/50 flex flex-col max-h-96"
+          >
+            <div class="flex items-center justify-between p-4 pb-2">
+              <h3 class="text-sm font-medium text-gray-900">Settings</h3>
+              <button
+                v-if="settingsChanged"
+                class="px-3 py-1 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                @click="saveSettings"
+              >
+                Save Changes
+              </button>
+            </div>
+            <div class="flex-1 overflow-y-auto scrollbar-hide px-4 pb-4">
+              <div class="space-y-3">
+              <!-- Theme Setting -->
+              <div class="flex items-center justify-between">
+                <label class="text-sm text-gray-700">Theme</label>
+                <select 
+                  v-model="tempSettings.theme"
+                  class="text-xs px-2 py-1 border border-gray-200 rounded-lg bg-white"
+                  @change="markSettingsChanged"
+                >
+                  <option value="light">Light</option>
+                  <option value="dark">Dark</option>
+                  <option value="auto">Auto</option>
+                </select>
+              </div>
+
+              <!-- AI Configuration Section -->
+              <div class="border border-gray-200 rounded-lg bg-white">
+                <button
+                  class="w-full flex items-center justify-between p-3 text-left hover:bg-gray-50 transition-colors"
+                  @click="toggleSection('ai')"
+                >
+                  <div class="flex items-center space-x-2">
+                    <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                    </svg>
+                    <span class="text-sm font-medium text-gray-900">AI Configuration</span>
+                  </div>
+                  <svg 
+                    :class="[
+                      'w-4 h-4 text-gray-500 transition-transform',
+                      expandedSections.ai ? 'transform rotate-180' : ''
+                    ]" 
+                    fill="none" 
+                    stroke="currentColor" 
+                    viewBox="0 0 24 24"
+                  >
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                  </svg>
+                </button>
+
+                <div v-if="expandedSections.ai" class="px-3 pb-3 space-y-3">
+                  <!-- AI Provider Setting -->
+                  <div class="flex items-center justify-between">
+                    <label class="text-sm text-gray-700">Provider</label>
+                    <select 
+                      v-model="tempSettings.aiProvider"
+                      class="text-xs px-2 py-1 border border-gray-200 rounded-lg bg-white"
+                      @change="markSettingsChanged"
+                    >
+                      <option value="openai">OpenAI</option>
+                      <option value="claude">Claude</option>
+                      <option value="gemini">Gemini</option>
+                      <option value="ollama">Ollama</option>
+                      <option value="ollama-turbo">Ollama Turbo</option>
+                    </select>
+                  </div>
+                
+                  <!-- API Keys -->
+                  <div class="space-y-2 pt-2 border-t border-gray-200">
+                    <!-- OpenAI API Key -->
+                    <div class="space-y-1">
+                      <label class="text-xs text-gray-600">OpenAI API Key</label>
+                      <div class="relative">
+                        <input
+                          v-model="tempSettings.openaiApiKey"
+                          :type="showApiKeys.openai ? 'text' : 'password'"
+                          placeholder="sk-..."
+                          class="w-full text-xs px-2 py-1.5 border border-gray-200 rounded-lg bg-white pr-8"
+                          @input="markSettingsChanged"
+                        >
+                        <button
+                          class="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                          @click="toggleApiKeyVisibility('openai')"
+                        >
+                          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path v-if="!showApiKeys.openai" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                            <path v-if="!showApiKeys.openai" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                            <path v-if="showApiKeys.openai" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21"/>
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+
+                    <!-- Claude API Key -->
+                    <div class="space-y-1">
+                      <label class="text-xs text-gray-600">Claude API Key</label>
+                      <div class="relative">
+                        <input
+                          v-model="tempSettings.claudeApiKey"
+                          :type="showApiKeys.claude ? 'text' : 'password'"
+                          placeholder="sk-ant-..."
+                          class="w-full text-xs px-2 py-1.5 border border-gray-200 rounded-lg bg-white pr-8"
+                          @input="markSettingsChanged"
+                        >
+                        <button
+                          class="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                          @click="toggleApiKeyVisibility('claude')"
+                        >
+                          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path v-if="!showApiKeys.claude" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                            <path v-if="!showApiKeys.claude" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                            <path v-if="showApiKeys.claude" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21"/>
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+
+                    <!-- Gemini API Key -->
+                    <div class="space-y-1">
+                      <label class="text-xs text-gray-600">Gemini API Key</label>
+                      <div class="relative">
+                        <input
+                          v-model="tempSettings.geminiApiKey"
+                          :type="showApiKeys.gemini ? 'text' : 'password'"
+                          placeholder="AI..."
+                          class="w-full text-xs px-2 py-1.5 border border-gray-200 rounded-lg bg-white pr-8"
+                          @input="markSettingsChanged"
+                        >
+                        <button
+                          class="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                          @click="toggleApiKeyVisibility('gemini')"
+                        >
+                          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path v-if="!showApiKeys.gemini" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                            <path v-if="!showApiKeys.gemini" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                            <path v-if="showApiKeys.gemini" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21"/>
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+
+                    <!-- Ollama Configuration -->
+                    <div class="space-y-1">
+                      <label class="text-xs text-gray-600">Ollama Base URL</label>
+                      <input
+                        v-model="tempSettings.ollamaBaseUrl"
+                        type="text"
+                        placeholder="http://localhost:11434"
+                        class="w-full text-xs px-2 py-1.5 border border-gray-200 rounded-lg bg-white"
+                        @input="markSettingsChanged"
+                      >
+                    </div>
+
+                    <div class="space-y-1">
+                      <label class="text-xs text-gray-600">Ollama Model</label>
+                      <input
+                        v-model="tempSettings.ollamaModel"
+                        type="text"
+                        placeholder="llama2, codellama, mistral, etc."
+                        class="w-full text-xs px-2 py-1.5 border border-gray-200 rounded-lg bg-white"
+                        @input="markSettingsChanged"
+                      >
+                    </div>
+                  </div>
+
+                  <!-- Test Connection Button -->
+                  <button
+                    class="w-full mt-2 px-3 py-1.5 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                    @click="testConnection"
+                  >
+                    Test {{ tempSettings.aiProvider.charAt(0).toUpperCase() + tempSettings.aiProvider.slice(1) }} Connection
+                  </button>
+
+                  <!-- Connection Status -->
+                  <div
+                    v-if="connectionStatus"
+                    :class="[
+                      'text-xs px-2 py-1 rounded text-center',
+                      connectionStatus.success ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                    ]"
+                  >
+                    {{ connectionStatus.message }}
+                  </div>
+                </div>
+              </div>
+
+              <!-- Interface Preferences Section -->
+              <div class="border border-gray-200 rounded-lg bg-white">
+                <button
+                  class="w-full flex items-center justify-between p-3 text-left hover:bg-gray-50 transition-colors"
+                  @click="toggleSection('interface')"
+                >
+                  <div class="flex items-center space-x-2">
+                    <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4"/>
+                    </svg>
+                    <span class="text-sm font-medium text-gray-900">Interface & Features</span>
+                  </div>
+                  <svg 
+                    :class="[
+                      'w-4 h-4 text-gray-500 transition-transform',
+                      expandedSections.interface ? 'transform rotate-180' : ''
+                    ]" 
+                    fill="none" 
+                    stroke="currentColor" 
+                    viewBox="0 0 24 24"
+                  >
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                  </svg>
+                </button>
+
+                <div v-if="expandedSections.interface" class="px-3 pb-3 space-y-3">
+                  <!-- Search Suggestions -->
+                  <div class="flex items-center justify-between">
+                    <label class="text-sm text-gray-700">Search Suggestions</label>
+                    <button
+                      :class="[
+                        'w-10 h-5 rounded-full transition-colors relative',
+                        tempSettings.searchSuggestions ? 'bg-blue-500' : 'bg-gray-300'
+                      ]"
+                      @click="toggleTempSetting('searchSuggestions')"
+                    >
+                      <div
+                        :class="[
+                          'w-4 h-4 bg-white rounded-full shadow-sm transition-transform absolute top-0.5',
+                          tempSettings.searchSuggestions ? 'translate-x-5' : 'translate-x-0.5'
+                        ]"
+                      />
+                    </button>
+                  </div>
+
+                  <!-- Voice Commands -->
+                  <div class="flex items-center justify-between">
+                    <label class="text-sm text-gray-700">Voice Commands</label>
+                    <button
+                      :class="[
+                        'w-10 h-5 rounded-full transition-colors relative',
+                        tempSettings.voiceCommands ? 'bg-blue-500' : 'bg-gray-300'
+                      ]"
+                      @click="toggleTempSetting('voiceCommands')"
+                    >
+                      <div
+                        :class="[
+                          'w-4 h-4 bg-white rounded-full shadow-sm transition-transform absolute top-0.5',
+                          tempSettings.voiceCommands ? 'translate-x-5' : 'translate-x-0.5'
+                        ]"
+                      />
+                    </button>
+                  </div>
+
+                  <!-- Analytics -->
+                  <div class="flex items-center justify-between">
+                    <label class="text-sm text-gray-700">Usage Analytics</label>
+                    <button
+                      :class="[
+                        'w-10 h-5 rounded-full transition-colors relative',
+                        tempSettings.analytics ? 'bg-blue-500' : 'bg-gray-300'
+                      ]"
+                      @click="toggleTempSetting('analytics')"
+                    >
+                      <div
+                        :class="[
+                          'w-4 h-4 bg-white rounded-full shadow-sm transition-transform absolute top-0.5',
+                          tempSettings.analytics ? 'translate-x-5' : 'translate-x-0.5'
+                        ]"
+                      />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Reset Button -->
+              <div class="pt-2 border-t border-gray-200">
+                <button
+                  class="text-xs text-red-600 hover:text-red-700 font-medium"
+                  @click="resetSettings"
+                >
+                  Reset to Defaults
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </transition>
+  </teleport>
+</template>
+
+<script setup>
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { useCommandIntelligence } from '../../../composables/useCommandIntelligence'
+import { useHighPerformanceSearch } from '../../../composables/useHighPerformanceSearch'
+import { useAI } from '../../ai/composables/useAI'
+// import { useContextAwareness } from '../../ai/composables/useContextAwareness'
+import { useVoiceCommands } from '../../../composables/useVoiceCommands'
+
+// Icons (simple SVG components)
+const SearchIcon = {
+  template: `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m21 21-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>`
+}
+
+const CommandIcon = {
+  template: `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3"/></svg>`
+}
+
+const AIIcon = {
+  template: `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>`
+}
+
+// Props and emits
+const emit = defineEmits(['execute', 'close', 'execute-action'])
+
+// State
+const isOpen = ref(false)
+const query = ref('')
+const debouncedQuery = ref('')
+const selectedIndex = ref(0)
+const isLoading = ref(false)
+const inputRef = ref(null)
+const panelRef = ref(null)
+const searchTime = ref(0)
+
+// Enhanced Features State
+const currentMode = ref('search') // search, ai, commands
+const detectedIntent = ref('search') // search, command, ai, file, navigation
+const showModeToggle = ref(false) // Show mode toggle only when needed
+const isProcessingAI = ref(false)
+const aiConversation = ref([])
+
+// Voice Commands State
+const isVoiceListening = ref(false)
+const voiceSupported = ref(false)
+
+// Predictive Features
+const predictiveSuggestions = ref([])
+const userPatterns = ref({})
+
+// Settings State
+const showSettings = ref(false)
+const settings = ref({
+  theme: 'light',
+  aiProvider: 'openai',
+  searchSuggestions: true,
+  voiceCommands: true,
+  analytics: true,
+  // API Keys
+  openaiApiKey: '',
+  claudeApiKey: '',
+  geminiApiKey: '',
+  // Ollama Configuration
+  ollamaBaseUrl: 'http://localhost:11434',
+  ollamaModel: 'llama2'
+})
+
+// Temporary settings for pending changes
+const tempSettings = ref({
+  theme: 'light',
+  aiProvider: 'openai',
+  searchSuggestions: true,
+  voiceCommands: true,
+  analytics: true,
+  openaiApiKey: '',
+  claudeApiKey: '',
+  geminiApiKey: '',
+  ollamaBaseUrl: 'http://localhost:11434',
+  ollamaModel: 'llama2'
+})
+
+const showApiKeys = ref({
+  openai: false,
+  claude: false,
+  gemini: false
+})
+
+const connectionStatus = ref(null)
+const settingsChanged = ref(false)
+
+const expandedSections = ref({
+  ai: true, // Start with AI section open
+  interface: false
+})
+
+// Multi-Intent Recognition
+const detectedIntents = ref([]) // Multiple intents for complex queries
+const intentConfidence = ref({}) // Confidence scores for each intent
+const contextualSuggestions = ref([])
+
+// Progressive Learning
+const learningData = ref({
+  userPreferences: {},
+  commandHistory: [],
+  searchPatterns: {},
+  intentAccuracy: 0
+})
+
+// Zero-State Dashboard Data
+const dashboardData = ref({
+  quickActions: [],
+  recentActivity: [],
+  contextualSuggestions: [],
+  behavioralPatterns: {},
+  temporalContext: {
+    timeOfDay: '',
+    dayOfWeek: '',
+    workingHours: true,
+    seasonalContext: ''
+  },
+  activityScore: 0,
+  lastRefresh: null
+})
+
+// Mode Configuration
+const modes = ref([
+  { key: 'search', label: 'Search', icon: '🔍' },
+  { key: 'ai', label: 'AI Assistant', icon: '🤖' },
+  { key: 'commands', label: 'Commands', icon: '⚡' }
+])
+
+// Command Intelligence
+const {
+  learnFromAction,
+  loadPreferences,
+  savePreferences
+} = useCommandIntelligence()
+
+// High-Performance Search
+const {
+  performSearch,
+  getSpellingSuggestions: getWorkerSpellingSuggestions,
+  preloadAndWarmup,
+  workerReady,
+  cacheReady,
+  metrics: performanceMetrics,
+  LAUNCH_TIME_TARGET,
+  SEARCH_TIME_TARGET
+} = useHighPerformanceSearch()
+
+// AI Integration
+const { sendMessage, isAvailable: aiAvailable } = useAI()
+
+// Voice Commands Integration
+const {
+  startListening,
+  stopListening,
+  isListening,
+  isSupported: voiceCommandsSupported,
+  transcript,
+  confidence
+} = useVoiceCommands()
+
+// Debounce timer
+let debounceTimer = null
+
+// Enhanced data with intelligence tags and keywords
+const allItems = ref([
+  // Files
+  {
+    id: 'file-1',
+    type: 'file',
+    title: 'workspace.vue',
+    description: 'Main workspace component',
+    icon: '📄',
+    path: 'app/pages/workspace.vue',
+    badge: 'Vue',
+    category: 'Files',
+    tags: ['vue', 'component', 'workspace', 'main', 'page'],
+    keywords: ['workspace', 'main', 'component', 'vue', 'page']
+  },
+  {
+    id: 'file-2',
+    type: 'file',
+    title: 'package.json',
+    description: 'Project configuration',
+    icon: '📦',
+    path: 'package.json',
+    badge: 'JSON',
+    category: 'Files',
+    tags: ['config', 'dependencies', 'npm', 'project', 'json'],
+    keywords: ['package', 'config', 'dependencies', 'npm']
+  },
+  {
+    id: 'file-3',
+    type: 'file',
+    title: 'tailwind.config.js',
+    description: 'Tailwind CSS configuration',
+    icon: '🎨',
+    path: 'tailwind.config.js',
+    badge: 'Config',
+    category: 'Files',
+    tags: ['tailwind', 'css', 'style', 'config', 'design'],
+    keywords: ['tailwind', 'css', 'styles', 'config', 'design']
+  },
+
+  // Commands
+  {
+    id: 'cmd-1',
+    type: 'command',
+    title: 'New File',
+    description: 'Create a new file',
+    icon: '📝',
+    action: 'create-file',
+    category: 'Commands',
+    tags: ['new', 'create', 'file', 'add'],
+    keywords: ['new', 'create', 'file', 'add', 'make']
+  },
+  {
+    id: 'cmd-2',
+    type: 'command',
+    title: 'New Folder',
+    description: 'Create a new folder',
+    icon: '📁',
+    action: 'create-folder',
+    category: 'Commands',
+    tags: ['new', 'create', 'folder', 'directory'],
+    keywords: ['new', 'create', 'folder', 'directory', 'mkdir']
+  },
+  {
+    id: 'cmd-3',
+    type: 'command',
+    title: 'Git Status',
+    description: 'Show git status',
+    icon: '🔄',
+    action: 'git-status',
+    category: 'Commands',
+    tags: ['git', 'status', 'version', 'control'],
+    keywords: ['git', 'status', 'changes', 'repository']
+  },
+  {
+    id: 'cmd-4',
+    type: 'command',
+    title: 'Terminal',
+    description: 'Open terminal',
+    icon: '💻',
+    action: 'open-terminal',
+    category: 'Commands',
+    tags: ['terminal', 'console', 'command', 'shell'],
+    keywords: ['terminal', 'console', 'shell', 'command', 'cli']
+  },
+
+  // AI Actions
+  {
+    id: 'ai-1',
+    type: 'ai',
+    title: 'Explain Code',
+    description: 'Get AI explanation for selected code',
+    icon: '🤖',
+    action: 'ai-explain',
+    category: 'AI Assistant',
+    tags: ['explain', 'understand', 'ai', 'help', 'code'],
+    keywords: ['explain', 'ai', 'help', 'understand', 'code']
+  },
+  {
+    id: 'ai-2',
+    type: 'ai',
+    title: 'Generate Code',
+    description: 'Generate code from natural language',
+    icon: '🤖',
+    action: 'ai-generate',
+    category: 'AI Assistant',
+    tags: ['generate', 'create', 'ai', 'code', 'write'],
+    keywords: ['generate', 'create', 'ai', 'code', 'write']
+  },
+
+  // Quick Actions
+  {
+    id: 'quick-1',
+    type: 'quick',
+    title: 'Daily Notes',
+    description: 'Open today\'s notes',
+    icon: '📋',
+    action: 'daily-notes',
+    category: 'Quick Actions',
+    tags: ['daily', 'notes', 'journal', 'today'],
+    keywords: ['daily', 'notes', 'journal', 'today', 'writing']
+  },
+  {
+    id: 'quick-2',
+    type: 'quick',
+    title: 'Task List',
+    description: 'View your task list',
+    icon: '✅',
+    action: 'tasks',
+    category: 'Quick Actions',
+    tags: ['tasks', 'todo', 'list', 'productivity'],
+    keywords: ['tasks', 'todo', 'list', 'productivity', 'work']
+  }
+])
+
+// Recent items (loaded from localStorage)
+const recentItems = ref([])
+
+// Enhanced Computed Properties
+const currentIcon = computed(() => {
+  if (currentMode.value === 'ai' || detectedIntent.value === 'ai') return AIIcon
+  if (currentMode.value === 'commands' || detectedIntent.value === 'command') return CommandIcon
+  return SearchIcon
+})
+
+const dynamicPlaceholder = computed(() => {
+  if (currentMode.value === 'ai') {
+    return isProcessingAI.value ? 'AI is thinking...' : 'Ask AI anything...'
+  }
+  if (currentMode.value === 'commands') return 'Run command...'
+
+  // Intent-based placeholders
+  switch (detectedIntent.value) {
+    case 'ai': return 'Ask AI anything...'
+    case 'command': return 'Run command...'
+    case 'file': return 'Search files...'
+    case 'navigation': return 'Navigate to...'
+    default: return 'Search files, run commands, or ask AI...'
+  }
+})
+
+const intentIndicatorClass = computed(() => {
+  const base = 'transition-all duration-200'
+  switch (detectedIntent.value) {
+    case 'ai': return `${base} bg-blue-100 text-blue-600`
+    case 'command': return `${base} bg-green-100 text-green-600`
+    case 'file': return `${base} bg-purple-100 text-purple-600`
+    case 'navigation': return `${base} bg-orange-100 text-orange-600`
+    default: return `${base} bg-gray-100 text-gray-600`
+  }
+})
+
+// High-performance search with worker and caching
+const filteredResults = ref([])
+const isSearchingActive = ref(false)
+
+// Perform search with high-performance system
+const performHighPerformanceSearch = async () => {
+  if (!debouncedQuery.value.trim()) {
+    filteredResults.value = []
+    searchTime.value = 0
+    return
+  }
+
+  isSearchingActive.value = true
+
+  try {
+    const context = 'pro-command-center'
+    const userPrefs = await getUserPreferences?.() || {}
+
+    const result = await performSearch(
+      debouncedQuery.value,
+      allItems.value,
+      {
+        context,
+        maxResults: 15,
+        mode: 'comprehensive',
+        userPreferences: userPrefs,
+        useCache: true
+      }
+    )
+
+    filteredResults.value = result.results || []
+    searchTime.value = result.searchTime || 0
+
+    // Log performance for monitoring
+    if (result.searchTime > SEARCH_TIME_TARGET) {
+      console.warn(`Search exceeded target: ${result.searchTime}ms > ${SEARCH_TIME_TARGET}ms`)
+    }
+  } catch (error) {
+    console.error('High-performance search failed:', error)
+    // Fallback to basic search
+    filteredResults.value = basicFallbackSearch(debouncedQuery.value)
+  } finally {
+    isSearchingActive.value = false
+  }
+}
+
+// Basic fallback search for error cases
+const basicFallbackSearch = (query) => {
+  const queryLower = query.toLowerCase()
+  return allItems.value
+    .filter(item =>
+      item.title?.toLowerCase().includes(queryLower)
+      || item.description?.toLowerCase().includes(queryLower)
+    )
+    .slice(0, 10)
+}
+
+// High-performance spelling suggestions
+const spellingSuggestions = ref([])
+
+const updateSpellingSuggestions = async () => {
+  if (debouncedQuery.value && filteredResults.value.length === 0) {
+    try {
+      spellingSuggestions.value = await getWorkerSpellingSuggestions(
+        debouncedQuery.value,
+        allItems.value,
+        3
+      )
+    } catch (error) {
+      console.warn('Spelling suggestions failed:', error)
+      spellingSuggestions.value = []
+    }
+  } else {
+    spellingSuggestions.value = []
+  }
+}
+
+// Intelligence stats for footer
+// Removed unused intelligenceStats computed property
+
+// Enhanced Methods
+const open = () => {
+  isOpen.value = true
+  selectedIndex.value = 0
+
+  // Refresh dashboard data for instant display
+  refreshDashboardData()
+
+  // Load predictive suggestions (legacy support)
+  loadPredictiveSuggestions()
+
+  // Check if we should show mode toggle
+  showModeToggle.value = aiAvailable || voiceSupported.value
+
+  nextTick(() => {
+    inputRef.value?.focus()
+  })
+
+  loadRecentItems()
+}
+
+// Mode Switching
+const switchMode = (mode) => {
+  currentMode.value = mode
+  query.value = ''
+  selectedIndex.value = 0
+
+  // Clear AI conversation when switching away from AI mode
+  if (mode !== 'ai') {
+    aiConversation.value = []
+  }
+
+  // Focus input
+  nextTick(() => {
+    inputRef.value?.focus()
+  })
+}
+
+// Enhanced Multi-Intent Detection System (used internally)
+const _detectIntent = (inputText) => {
+  const text = inputText.toLowerCase().trim()
+
+  // AI intent patterns (enhanced)
+  if (text.startsWith('ai:') || text.includes('help me') || text.includes('how to')
+    || text.includes('what is') || text.includes('explain') || text.includes('?')
+    || text.includes('generate') || text.includes('create code') || text.includes('debug')
+    || text.includes('optimize') || text.includes('refactor') || text.includes('suggest')) {
+    return 'ai'
+  }
+
+  // Command intent patterns (enhanced)
+  if (text.startsWith('>') || text.startsWith('!') || text.includes('run')
+    || text.includes('execute') || text.includes('command') || text.includes('terminal')
+    || text.includes('build') || text.includes('deploy') || text.includes('install')
+    || text.includes('npm') || text.includes('git') || text.includes('pnpm')) {
+    return 'command'
+  }
+
+  // File intent patterns (enhanced)
+  if (text.includes('.') && (text.includes('vue') || text.includes('js')
+    || text.includes('ts') || text.includes('css') || text.includes('json')
+    || text.includes('md') || text.includes('html') || text.includes('py')
+    || text.includes('config') || text.includes('env'))) {
+    return 'file'
+  }
+
+  // Navigation intent patterns (enhanced)
+  if (text.includes('go to') || text.includes('navigate') || text.includes('open')
+    || text.includes('switch to') || text.includes('show') || text.includes('view')
+    || text.includes('dashboard') || text.includes('settings') || text.includes('workspace')) {
+    return 'navigation'
+  }
+
+  return 'search'
+}
+
+// Advanced Multi-Intent Recognition
+const detectMultipleIntents = (inputText) => {
+  const text = inputText.toLowerCase().trim()
+  const intents = []
+  const confidence = {}
+
+  // Define intent patterns with confidence weights
+  const patterns = {
+    ai: {
+      patterns: ['ai:', 'help me', 'how to', 'what is', 'explain', '?', 'generate', 'create code', 'debug', 'optimize', 'refactor', 'suggest'],
+      weight: 1.0
+    },
+    command: {
+      patterns: ['>', '!', 'run', 'execute', 'command', 'terminal', 'build', 'deploy', 'install', 'npm', 'git', 'pnpm'],
+      weight: 0.9
+    },
+    file: {
+      patterns: ['.vue', '.js', '.ts', '.css', '.json', '.md', '.html', '.py', 'config', '.env'],
+      weight: 0.8
+    },
+    navigation: {
+      patterns: ['go to', 'navigate', 'open', 'switch to', 'show', 'view', 'dashboard', 'settings', 'workspace'],
+      weight: 0.7
+    },
+    search: {
+      patterns: ['find', 'search', 'look for', 'locate'],
+      weight: 0.6
+    }
+  }
+
+  // Calculate confidence for each intent
+  Object.entries(patterns).forEach(([intent, { patterns: intentPatterns, weight }]) => {
+    let score = 0
+    let matchCount = 0
+
+    intentPatterns.forEach((pattern) => {
+      if (text.includes(pattern)) {
+        matchCount++
+        score += weight * (pattern.length / text.length) // Longer matches get higher scores
+      }
+    })
+
+    if (score > 0) {
+      confidence[intent] = Math.min(score * (matchCount / intentPatterns.length), 1.0)
+      intents.push({ intent, confidence: confidence[intent] })
+    }
+  })
+
+  // Sort by confidence and return top intents
+  intents.sort((a, b) => b.confidence - a.confidence)
+
+  // If no specific intent detected, default to search
+  if (intents.length === 0) {
+    intents.push({ intent: 'search', confidence: 0.5 })
+    confidence.search = 0.5
+  }
+
+  return { intents: intents.slice(0, 3), confidence } // Return top 3 intents
+}
+
+// Progressive Learning System
+const learnFromUserInteraction = (query, selectedResult, executionSuccess) => {
+  const timestamp = Date.now()
+  const interaction = {
+    query,
+    selectedResult,
+    executionSuccess,
+    timestamp,
+    detectedIntent: detectedIntent.value,
+    confidence: intentConfidence.value
+  }
+
+  // Store interaction
+  learningData.value.commandHistory.push(interaction)
+
+  // Update search patterns
+  if (!learningData.value.searchPatterns[query]) {
+    learningData.value.searchPatterns[query] = {
+      count: 0,
+      successRate: 0,
+      averageTime: 0,
+      preferredResults: []
+    }
+  }
+
+  const pattern = learningData.value.searchPatterns[query]
+  pattern.count++
+  pattern.successRate = (pattern.successRate + (executionSuccess ? 1 : 0)) / 2
+
+  // Update user preferences
+  if (selectedResult) {
+    if (!learningData.value.userPreferences[selectedResult.type]) {
+      learningData.value.userPreferences[selectedResult.type] = 0
+    }
+    learningData.value.userPreferences[selectedResult.type]++
+  }
+
+  // Calculate intent accuracy
+  const recentInteractions = learningData.value.commandHistory.slice(-50)
+  const accurateIntents = recentInteractions.filter(i =>
+    i.executionSuccess && i.confidence[i.detectedIntent] > 0.7
+  ).length
+  learningData.value.intentAccuracy = accurateIntents / recentInteractions.length
+
+  // Save to localStorage
+  localStorage.setItem('proCommandCenter_learningData', JSON.stringify(learningData.value))
+}
+
+// Contextual Intelligence
+const generateContextualSuggestions = (currentQuery) => {
+  const suggestions = []
+  const timeOfDay = new Date().getHours()
+
+  // Time-based contextual suggestions
+  if (timeOfDay >= 9 && timeOfDay <= 12) {
+    suggestions.push({
+      id: 'morning-standup',
+      title: 'Daily Standup Notes',
+      description: 'Create standup meeting notes',
+      icon: '🌅',
+      type: 'template',
+      confidence: 0.8
+    })
+  }
+
+  if (timeOfDay >= 14 && timeOfDay <= 17) {
+    suggestions.push({
+      id: 'afternoon-review',
+      title: 'Code Review Session',
+      description: 'Review pending pull requests',
+      icon: '🔍',
+      type: 'action',
+      confidence: 0.7
+    })
+  }
+
+  // Pattern-based suggestions
+  const queryLower = currentQuery.toLowerCase()
+  if (queryLower.includes('bug') || queryLower.includes('error')) {
+    suggestions.push({
+      id: 'debug-assistant',
+      title: 'Debug Assistant',
+      description: 'AI-powered debugging help',
+      icon: '🐛',
+      type: 'ai',
+      confidence: 0.9
+    })
+  }
+
+  if (queryLower.includes('deploy') || queryLower.includes('build')) {
+    suggestions.push({
+      id: 'deployment-checklist',
+      title: 'Deployment Checklist',
+      description: 'Pre-deployment verification',
+      icon: '🚀',
+      type: 'template',
+      confidence: 0.85
+    })
+  }
+
+  return suggestions.filter(s => s.confidence > 0.6).slice(0, 5)
+}
+
+// Zero-State Dashboard Intelligence
+const calculateActivityScore = (item) => {
+  const now = Date.now()
+  const timeDiff = now - (item.timestamp || item.lastAccessed || now)
+  const hoursAgo = timeDiff / (1000 * 60 * 60)
+
+  // Recency weight (decay over time)
+  const recencyWeight = 0.4
+  const recencyScore = Math.exp(-hoursAgo / 24) // Exponential decay over 24 hours
+
+  // Frequency weight
+  const frequencyWeight = 0.3
+  const frequencyScore = Math.min((item.accessCount || 1) / 10, 1) // Normalized to 0-1
+
+  // Collaboration weight
+  const collaborationWeight = 0.2
+  const collaborationScore = (item.collaborators?.length || 0) / 5 // Up to 5 collaborators = max score
+
+  // Context weight (current project relevance)
+  const contextWeight = 0.1
+  const contextScore = item.isCurrentProject ? 1 : 0.5
+
+  return (
+    recencyWeight * recencyScore
+    + frequencyWeight * frequencyScore
+    + collaborationWeight * collaborationScore
+    + contextWeight * contextScore
+  )
+}
+
+const getTemporalContext = () => {
+  const now = new Date()
+  const hour = now.getHours()
+  const day = now.getDay() // 0 = Sunday, 1 = Monday, etc.
+  const month = now.getMonth()
+
+  let timeOfDay = 'morning'
+  if (hour >= 12 && hour < 17) timeOfDay = 'afternoon'
+  else if (hour >= 17 && hour < 21) timeOfDay = 'evening'
+  else if (hour >= 21 || hour < 6) timeOfDay = 'night'
+
+  const dayOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][day]
+  const workingHours = hour >= 8 && hour <= 18 && day >= 1 && day <= 5
+
+  let seasonalContext = 'spring'
+  if (month >= 5 && month <= 7) seasonalContext = 'summer'
+  else if (month >= 8 && month <= 10) seasonalContext = 'fall'
+  else if (month >= 11 || month <= 1) seasonalContext = 'winter'
+
+  return { timeOfDay, dayOfWeek, workingHours, seasonalContext }
+}
+
+const generateQuickActions = () => {
+  const temporal = getTemporalContext()
+  const actions = []
+
+  // Time-based quick actions
+  if (temporal.timeOfDay === 'morning' && temporal.workingHours) {
+    actions.push(
+      {
+        id: 'daily-standup',
+        title: 'Create Daily Standup',
+        description: 'Quick standup notes template',
+        icon: '🌅',
+        action: 'create-template',
+        template: 'standup',
+        priority: 0.9,
+        confidence: 0.85
+      },
+      {
+        id: 'review-calendar',
+        title: 'Review Today\'s Schedule',
+        description: 'Check upcoming meetings and tasks',
+        icon: '📅',
+        action: 'open-calendar',
+        priority: 0.8,
+        confidence: 0.8
+      }
+    )
+  }
+
+  if (temporal.timeOfDay === 'afternoon' && temporal.workingHours) {
+    actions.push(
+      {
+        id: 'team-check-in',
+        title: 'Team Check-in',
+        description: 'Connect with team members',
+        icon: '👥',
+        action: 'open-chat',
+        priority: 0.7,
+        confidence: 0.75
+      },
+      {
+        id: 'progress-update',
+        title: 'Update Project Status',
+        description: 'Share progress with stakeholders',
+        icon: '📊',
+        action: 'create-update',
+        priority: 0.8,
+        confidence: 0.8
+      }
+    )
+  }
+
+  if (temporal.dayOfWeek === 'Monday') {
+    actions.push({
+      id: 'week-planning',
+      title: 'Plan This Week',
+      description: 'Set weekly goals and priorities',
+      icon: '🎯',
+      action: 'create-template',
+      template: 'weekly-plan',
+      priority: 0.9,
+      confidence: 0.9
+    })
+  }
+
+  if (temporal.dayOfWeek === 'Friday' && temporal.timeOfDay === 'afternoon') {
+    actions.push({
+      id: 'week-review',
+      title: 'Weekly Review',
+      description: 'Reflect on accomplishments and learnings',
+      icon: '📝',
+      action: 'create-template',
+      template: 'weekly-review',
+      priority: 0.85,
+      confidence: 0.8
+    })
+  }
+
+  // Add learning-based actions
+  const frequentActions = learningData.value.commandHistory
+    .filter(h => h.executionSuccess && h.timestamp > Date.now() - 7 * 24 * 60 * 60 * 1000) // Last 7 days
+    .reduce((acc, h) => {
+      const key = h.selectedResult?.action || h.selectedResult?.type
+      if (key) {
+        acc[key] = (acc[key] || 0) + 1
+      }
+      return acc
+    }, {})
+
+  const topActions = Object.entries(frequentActions)
+    .sort(([,a], [,b]) => b - a)
+    .slice(0, 2)
+    .map(([action, count]) => ({
+      id: `frequent-${action}`,
+      title: `${action.charAt(0).toUpperCase() + action.slice(1).replace('-', ' ')}`,
+      description: `Used ${count} times this week`,
+      icon: '⚡',
+      action,
+      priority: 0.6,
+      confidence: 0.7
+    }))
+
+  actions.push(...topActions)
+
+  return actions
+    .sort((a, b) => (b.priority * b.confidence) - (a.priority * a.confidence))
+    .slice(0, 5)
+}
+
+const generateSmartRecentActivity = () => {
+  // Enhanced recent items with smart scoring
+  const recentWithScores = recentItems.value
+    .map(item => ({
+      ...item,
+      score: calculateActivityScore(item),
+      isRelevant: true,
+      contextualNote: generateContextualNote(item)
+    }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 7)
+
+  return recentWithScores
+}
+
+const generateContextualNote = (item) => {
+  const now = Date.now()
+  const timeDiff = now - (item.timestamp || item.lastAccessed || now)
+  const hoursAgo = Math.floor(timeDiff / (1000 * 60 * 60))
+  const daysAgo = Math.floor(hoursAgo / 24)
+
+  if (item.collaborators?.length > 0) {
+    return `${item.collaborators.length} team member${item.collaborators.length > 1 ? 's' : ''} active`
+  }
+
+  if (daysAgo === 0 && hoursAgo < 2) {
+    return 'Recently active'
+  }
+
+  if (daysAgo === 0) {
+    return `${hoursAgo}h ago`
+  }
+
+  if (daysAgo === 1) {
+    return 'Yesterday'
+  }
+
+  return `${daysAgo} days ago`
+}
+
+const generateAdvancedSuggestions = () => {
+  const suggestions = []
+
+  // Learning-based suggestions
+  const patterns = learningData.value.searchPatterns
+  const popularQueries = Object.entries(patterns)
+    .filter(([_query, data]) => data.successRate > 0.7 && data.count > 2)
+    .sort(([,a], [,b]) => b.count - a.count)
+    .slice(0, 3)
+
+  popularQueries.forEach(([query, data]) => {
+    suggestions.push({
+      id: `popular-${query.replace(/\s+/g, '-')}`,
+      title: `Try: "${query}"`,
+      description: `${Math.round(data.successRate * 100)}% success rate`,
+      icon: '🔍',
+      action: 'search',
+      query,
+      confidence: data.successRate
+    })
+  })
+
+  // Feature discovery suggestions
+  const underusedFeatures = [
+    {
+      id: 'voice-commands',
+      title: 'Try Voice Commands',
+      description: 'Use voice to navigate faster',
+      icon: '🎤',
+      action: 'enable-voice',
+      confidence: 0.6
+    },
+    {
+      id: 'ai-assistant',
+      title: 'Ask AI Assistant',
+      description: 'Get help with complex tasks',
+      icon: '🤖',
+      action: 'switch-mode',
+      mode: 'ai',
+      confidence: 0.7
+    }
+  ]
+
+  // Add underused features if user hasn't tried them recently
+  const recentActions = learningData.value.commandHistory
+    .slice(-20)
+    .map(h => h.selectedResult?.action)
+
+  underusedFeatures.forEach((feature) => {
+    if (!recentActions.includes(feature.action)) {
+      suggestions.push(feature)
+    }
+  })
+
+  return suggestions
+    .sort((a, b) => b.confidence - a.confidence)
+    .slice(0, 4)
+}
+
+const refreshDashboardData = () => {
+  const startTime = performance.now()
+
+  dashboardData.value = {
+    quickActions: generateQuickActions(),
+    recentActivity: generateSmartRecentActivity(),
+    contextualSuggestions: generateAdvancedSuggestions(),
+    temporalContext: getTemporalContext(),
+    lastRefresh: Date.now()
+  }
+
+  const refreshTime = performance.now() - startTime
+  if (refreshTime > 50) {
+    console.warn(`Dashboard refresh took ${Math.round(refreshTime)}ms - consider optimization`)
+  }
+}
+
+// Dashboard Action Handlers
+const executeDashboardAction = (action) => {
+  // Learn from this interaction
+  learnFromUserInteraction('', action, true)
+
+  // Execute based on action type
+  switch (action.action) {
+    case 'create-template':
+      emit('execute', {
+        type: 'template',
+        action: 'create',
+        template: action.template,
+        data: action
+      })
+      break
+    case 'open-calendar':
+      emit('execute', {
+        type: 'calendar',
+        action: 'open',
+        data: action
+      })
+      break
+    case 'open-chat':
+      emit('execute', {
+        type: 'chat',
+        action: 'open',
+        data: action
+      })
+      break
+    case 'create-update':
+      emit('execute', {
+        type: 'update',
+        action: 'create',
+        data: action
+      })
+      break
+    case 'switch-mode':
+      if (action.mode) {
+        switchMode(action.mode)
+        return // Don't close for mode switches
+      }
+      break
+    case 'enable-voice':
+      if (voiceSupported.value) {
+        toggleVoiceCommand()
+        return // Don't close for voice toggle
+      }
+      break
+    default:
+      emit('execute', {
+        type: action.action,
+        action: 'execute',
+        data: action
+      })
+  }
+
+  close()
+}
+
+const executeDashboardSuggestion = (suggestion) => {
+  // Learn from this interaction
+  learnFromUserInteraction('', suggestion, true)
+
+  if (suggestion.action === 'search' && suggestion.query) {
+    // Populate search field and trigger search
+    query.value = suggestion.query
+    handleInput()
+    return // Don't close for search suggestions
+  }
+
+  if (suggestion.action === 'switch-mode' && suggestion.mode) {
+    switchMode(suggestion.mode)
+    return // Don't close for mode switches
+  }
+
+  // Default action execution
+  emit('execute', {
+    type: suggestion.action,
+    action: 'execute',
+    data: suggestion
+  })
+
+  close()
+}
+
+// Predictive Suggestions
+const loadPredictiveSuggestions = () => {
+  const timeOfDay = new Date().getHours()
+  const dayOfWeek = new Date().getDay()
+
+  // Time-based suggestions
+  const suggestions = []
+
+  if (timeOfDay >= 9 && timeOfDay <= 17) {
+    suggestions.push({
+      id: 'work-focus',
+      title: 'Focus Session',
+      description: 'Start a focused work session',
+      icon: '🎯',
+      type: 'action'
+    })
+  }
+
+  if (timeOfDay >= 17 || timeOfDay <= 9) {
+    suggestions.push({
+      id: 'daily-review',
+      title: 'Daily Review',
+      description: 'Review your day and plan tomorrow',
+      icon: '📝',
+      type: 'action'
+    })
+  }
+
+  // Day-based suggestions
+  if (dayOfWeek === 1) { // Monday
+    suggestions.push({
+      id: 'week-planning',
+      title: 'Week Planning',
+      description: 'Plan your week ahead',
+      icon: '📅',
+      type: 'action'
+    })
+  }
+
+  // Recent pattern-based suggestions
+  if (userPatterns.value.frequentFiles) {
+    userPatterns.value.frequentFiles.slice(0, 2).forEach((file) => {
+      suggestions.push({
+        id: `frequent-${file.id}`,
+        title: file.title,
+        description: `Frequently accessed • ${file.accessCount} times`,
+        icon: file.icon,
+        type: 'file'
+      })
+    })
+  }
+
+  predictiveSuggestions.value = suggestions.slice(0, 4)
+}
+
+const close = () => {
+  isOpen.value = false
+  query.value = ''
+  selectedIndex.value = 0
+  emit('close')
+}
+
+const handleBackdropClick = (e) => {
+  if (e.target === e.currentTarget) {
+    close()
+  }
+}
+
+const handleInput = () => {
+  selectedIndex.value = 0
+
+  // Enhanced Multi-Intent Detection
+  const multiIntentResult = detectMultipleIntents(query.value)
+  detectedIntents.value = multiIntentResult.intents
+  intentConfidence.value = multiIntentResult.confidence
+  detectedIntent.value = multiIntentResult.intents[0]?.intent || 'search'
+
+  // Generate contextual suggestions
+  if (query.value.trim()) {
+    contextualSuggestions.value = generateContextualSuggestions(query.value)
+  }
+
+  // Auto-switch to AI mode if AI intent is detected with high confidence
+  if (detectedIntent.value === 'ai' && intentConfidence.value.ai > 0.8 && currentMode.value !== 'ai') {
+    currentMode.value = 'ai'
+    showModeToggle.value = true
+  }
+
+  // Auto-switch to command mode if command intent is detected with high confidence
+  if (detectedIntent.value === 'command' && intentConfidence.value.command > 0.8 && currentMode.value !== 'commands') {
+    currentMode.value = 'commands'
+    showModeToggle.value = true
+  }
+
+  // Clear previous timer
+  if (debounceTimer) {
+    clearTimeout(debounceTimer)
+  }
+
+  // Show loading immediately for better UX
+  if (query.value.trim()) {
+    isLoading.value = true
+  }
+
+  // Optimized debouncing for high-performance search with multi-intent support
+  debounceTimer = setTimeout(async () => {
+    debouncedQuery.value = query.value
+
+    // Handle different modes with multi-intent awareness
+    if (currentMode.value === 'ai' && query.value.trim()) {
+      // Don't auto-trigger AI in AI mode - wait for Enter
+      isLoading.value = false
+    } else if (query.value.trim()) {
+      await performHighPerformanceSearch()
+      await updateSpellingSuggestions()
+
+      // Add contextual and multi-intent results
+      if (contextualSuggestions.value.length > 0) {
+        filteredResults.value = [...contextualSuggestions.value, ...filteredResults.value]
+      }
+
+      isLoading.value = false
+    } else {
+      filteredResults.value = []
+      spellingSuggestions.value = []
+      contextualSuggestions.value = []
+      searchTime.value = 0
+      isLoading.value = false
+    }
+  }, 100) // Reduced debounce for better responsiveness
+}
+
+// AI Conversation Methods
+const handleAIQuery = async () => {
+  if (isProcessingAI.value || !query.value.trim()) return
+
+  isProcessingAI.value = true
+
+  // Add user message to conversation
+  const userMessage = {
+    id: Date.now(),
+    role: 'user',
+    content: query.value,
+    timestamp: new Date()
+  }
+  aiConversation.value.push(userMessage)
+
+  try {
+    const response = await sendMessage(query.value, {
+      context: 'command-center',
+      conversationHistory: aiConversation.value.slice(-5) // Last 5 messages for context
+    })
+
+    // Add AI response
+    const aiMessage = {
+      id: Date.now() + 1,
+      role: 'assistant',
+      content: response.text || 'I apologize, but I encountered an issue processing your request.',
+      timestamp: new Date(),
+      actions: response.actions || []
+    }
+    aiConversation.value.push(aiMessage)
+  } catch (error) {
+    console.error('AI query error:', error)
+    aiConversation.value.push({
+      id: Date.now() + 1,
+      role: 'assistant',
+      content: 'I apologize, but I encountered an error. Please try again.',
+      timestamp: new Date()
+    })
+  } finally {
+    isProcessingAI.value = false
+    query.value = '' // Clear input after sending
+  }
+}
+
+const formatMessage = (content) => {
+  // Simple markdown-like formatting for professional appearance
+  return content
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    .replace(/`(.*?)`/g, '<code class="bg-gray-100 px-1 py-0.5 rounded text-sm">$1</code>')
+    .replace(/\n/g, '<br>')
+}
+
+const executeAIAction = (action) => {
+  emit('execute-action', { type: 'ai_action', action })
+  // Learn from AI action usage
+  learnFromAction(action, query.value, 'ai-conversation')
+}
+
+const executePredictiveSuggestion = (suggestion) => {
+  emit('execute-action', { type: 'predictive', suggestion })
+  // Learn from predictive suggestion usage
+  learnFromAction(suggestion, '', 'predictive-suggestion')
+  close()
+}
+
+// Voice Command Methods
+const toggleVoiceCommand = () => {
+  if (isVoiceListening.value) {
+    stopVoiceListening()
+  } else {
+    startVoiceListening()
+  }
+}
+
+const startVoiceListening = async () => {
+  try {
+    await startListening()
+    isVoiceListening.value = true
+  } catch (error) {
+    console.warn('Voice listening failed:', error)
+  }
+}
+
+const stopVoiceListening = () => {
+  stopListening()
+  isVoiceListening.value = false
+}
+
+// Watch voice transcript and apply to query
+watch(transcript, (newTranscript) => {
+  if (newTranscript && confidence.value > 0.7) {
+    query.value = newTranscript
+    handleInput()
+  }
+})
+
+const handleKeyDown = (e) => {
+  if (e.key === 'Escape') {
+    e.preventDefault()
+    close()
+  }
+}
+
+const handleInputKeyDown = (e) => {
+  // Enhanced keyboard handling with mode support
+  switch (e.key) {
+    case 'Enter':
+      e.preventDefault()
+      if (currentMode.value === 'ai') {
+        // Handle AI query
+        if (query.value.trim()) {
+          handleAIQuery()
+        }
+      } else {
+        // Handle regular search results
+        const results = query.value ? filteredResults.value : recentItems.value.slice(0, 5)
+        if (results[selectedIndex.value]) {
+          executeItem(results[selectedIndex.value])
+        }
+      }
+      break
+
+    case 'ArrowDown':
+      e.preventDefault()
+      if (currentMode.value !== 'ai') {
+        const results = query.value ? filteredResults.value : recentItems.value.slice(0, 5)
+        selectedIndex.value = Math.min(selectedIndex.value + 1, results.length - 1)
+      }
+      break
+
+    case 'ArrowUp':
+      e.preventDefault()
+      if (currentMode.value !== 'ai') {
+        selectedIndex.value = Math.max(selectedIndex.value - 1, 0)
+      }
+      break
+
+    case 'Tab':
+      e.preventDefault()
+      if (e.shiftKey) {
+        // Shift+Tab: Previous mode
+        const currentIndex = modes.value.findIndex(m => m.key === currentMode.value)
+        const prevIndex = currentIndex > 0 ? currentIndex - 1 : modes.value.length - 1
+        switchMode(modes.value[prevIndex].key)
+      } else {
+        // Tab: Next mode or auto-complete
+        if (showModeToggle.value) {
+          const currentIndex = modes.value.findIndex(m => m.key === currentMode.value)
+          const nextIndex = currentIndex < modes.value.length - 1 ? currentIndex + 1 : 0
+          switchMode(modes.value[nextIndex].key)
+        } else {
+          // Auto-complete for files
+          const results = query.value ? filteredResults.value : recentItems.value.slice(0, 5)
+          if (results[selectedIndex.value] && results[selectedIndex.value].type === 'file') {
+            query.value = results[selectedIndex.value].title
+          }
+        }
+      }
+      break
+
+    case 'Escape':
+      e.preventDefault()
+      if (currentMode.value === 'ai' && aiConversation.value.length > 0) {
+        // Clear AI conversation first
+        aiConversation.value = []
+        query.value = ''
+      } else {
+        // Close command center
+        close()
+      }
+      break
+  }
+}
+
+const executeItem = (item) => {
+  let executionSuccess = true
+
+  try {
+    // Learn from this action for intelligence (legacy)
+    const context = 'pro-command-center'
+    learnFromAction(item, query.value, context)
+
+    // Progressive Learning - Track user interaction
+    learnFromUserInteraction(query.value, item, executionSuccess)
+
+    // Monitor search performance if this was from a search
+    if (searchTime.value > 0) {
+      const { $performanceMonitor } = useNuxtApp()
+      if ($performanceMonitor) {
+        $performanceMonitor.monitorSearchPerformance(
+          query.value,
+          searchTime.value,
+          filteredResults.value.length,
+          false // Not a cache hit in this flow
+        )
+      }
+    }
+
+    // Add to recent items (legacy support)
+    addToRecent(item)
+
+    // Execute the item
+    emit('execute', {
+      type: item.type,
+      action: item.action,
+      data: item,
+      intent: detectedIntent.value,
+      confidence: intentConfidence.value,
+      multiIntents: detectedIntents.value
+    })
+
+    // Close the command center
+    close()
+  } catch (error) {
+    executionSuccess = false
+    console.error('Error executing item:', error)
+
+    // Learn from failed execution
+    learnFromUserInteraction(query.value, item, executionSuccess)
+
+    // Still close the command center but could show error toast in the future
+    close()
+  }
+}
+
+const addToRecent = (item) => {
+  if (typeof window === 'undefined') return
+
+  const recent = recentItems.value.filter(r => r.id !== item.id)
+  recent.unshift({
+    ...item,
+    timestamp: Date.now()
+  })
+
+  recentItems.value = recent.slice(0, 10)
+
+  try {
+    localStorage.setItem('command-center-recent', JSON.stringify(recentItems.value))
+  } catch (error) {
+    console.warn('Failed to save recent items:', error)
+  }
+}
+
+const loadRecentItems = () => {
+  if (typeof window === 'undefined') return
+
+  try {
+    const stored = localStorage.getItem('command-center-recent')
+    if (stored) {
+      recentItems.value = JSON.parse(stored)
+    }
+  } catch (error) {
+    console.warn('Failed to load recent items:', error)
+  }
+}
+
+const highlightMatch = (text, searchTerm) => {
+  if (!searchTerm.trim()) return text
+
+  const cleanTerm = searchTerm.replace(/^(ai:|>)/, '').trim()
+  if (!cleanTerm) return text
+
+  const regex = new RegExp(`(${cleanTerm})`, 'gi')
+  return text.replace(regex, '<mark class="bg-yellow-200 text-yellow-900 px-0.5 rounded">$1</mark>')
+}
+
+// Global keyboard handler
+const handleGlobalKeyDown = (e) => {
+  // Ctrl+K or Cmd+K
+  if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+    e.preventDefault()
+    if (isOpen.value) {
+      close()
+    } else {
+      open()
+    }
+  }
+
+  // Ctrl+Shift+P or Cmd+Shift+P (alternative)
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'P') {
+    e.preventDefault()
+    if (isOpen.value) {
+      close()
+    } else {
+      open()
+    }
+  }
+}
+
+// Enhanced Lifecycle with all feature initialization
+onMounted(async () => {
+  const startTime = performance.now()
+
+  document.addEventListener('keydown', handleGlobalKeyDown)
+
+  // Initialize voice support detection
+  voiceSupported.value = voiceCommandsSupported
+
+  // Load settings
+  loadSettings()
+
+  // Load user patterns for predictive features
+  try {
+    const stored = localStorage.getItem('command-center-patterns')
+    if (stored) {
+      userPatterns.value = JSON.parse(stored)
+    }
+  } catch (error) {
+    console.warn('Failed to load user patterns:', error)
+  }
+
+  // Initialize Progressive Learning System
+  try {
+    const storedLearningData = localStorage.getItem('proCommandCenter_learningData')
+    if (storedLearningData) {
+      learningData.value = { ...learningData.value, ...JSON.parse(storedLearningData) }
+    }
+  } catch (error) {
+    console.warn('Failed to load learning data:', error)
+  }
+
+  // Load data in parallel for faster initialization
+  await Promise.all([
+    loadRecentItems(),
+    loadPreferences(),
+    loadPredictiveSuggestions(),
+    // Preload and warmup the high-performance search
+    preloadAndWarmup(allItems.value)
+  ])
+
+  // Initialize dashboard data after basic loading
+  refreshDashboardData()
+
+  const initTime = performance.now() - startTime
+
+  // Monitor launch performance
+  const { $performanceMonitor } = useNuxtApp()
+  if ($performanceMonitor) {
+    $performanceMonitor.monitorLaunchPerformance('ProCommandCenter', startTime)
+  }
+
+  // Check if we met the launch time target
+  if (initTime <= LAUNCH_TIME_TARGET) {
+    console.log(`✅ Enhanced ProCommandCenter initialized in ${initTime}ms (target: ${LAUNCH_TIME_TARGET}ms)`)
+  } else {
+    console.warn(`⚠️ Enhanced ProCommandCenter initialization exceeded target: ${initTime}ms > ${LAUNCH_TIME_TARGET}ms`)
+  }
+})
+
+onUnmounted(() => {
+  document.removeEventListener('keydown', handleGlobalKeyDown)
+  savePreferences()
+
+  // Save user patterns for predictive features
+  try {
+    localStorage.setItem('command-center-patterns', JSON.stringify(userPatterns.value))
+  } catch (error) {
+    console.warn('Failed to save user patterns:', error)
+  }
+
+  // Cleanup voice commands
+  if (isVoiceListening.value) {
+    stopVoiceListening()
+  }
+
+  // Cleanup timers
+  if (debounceTimer) {
+    clearTimeout(debounceTimer)
+  }
+})
+
+// Enhanced Watchers
+watch(query, () => {
+  selectedIndex.value = 0
+})
+
+// Watch for mode changes to update UI
+watch(currentMode, (_newMode) => {
+  // Reset selection when switching modes
+  selectedIndex.value = 0
+
+  // Update placeholder immediately
+  nextTick(() => {
+    inputRef.value?.focus()
+  })
+})
+
+// Watch for voice listening state
+watch(isListening, (listening) => {
+  isVoiceListening.value = listening
+})
+
+// Settings Methods
+const toggleSettings = () => {
+  showSettings.value = !showSettings.value
+  if (showSettings.value) {
+    // Copy current settings to temp when opening
+    tempSettings.value = { ...settings.value }
+    settingsChanged.value = false
+  }
+}
+
+const toggleSection = (section) => {
+  expandedSections.value[section] = !expandedSections.value[section]
+}
+
+const markSettingsChanged = () => {
+  settingsChanged.value = true
+}
+
+const toggleTempSetting = (key) => {
+  tempSettings.value[key] = !tempSettings.value[key]
+  markSettingsChanged()
+}
+
+const saveSettings = () => {
+  // Copy temp settings to actual settings
+  settings.value = { ...tempSettings.value }
+  localStorage.setItem('pro-command-center-settings', JSON.stringify(settings.value))
+  
+  // Apply settings immediately
+  applyTheme(settings.value.theme)
+  
+  settingsChanged.value = false
+}
+
+const resetSettings = () => {
+  const defaultSettings = {
+    theme: 'light',
+    aiProvider: 'openai',
+    searchSuggestions: true,
+    voiceCommands: true,
+    analytics: true,
+    openaiApiKey: '',
+    claudeApiKey: '',
+    geminiApiKey: '',
+    ollamaBaseUrl: 'http://localhost:11434',
+    ollamaModel: 'llama2'
+  }
+  
+  settings.value = { ...defaultSettings }
+  tempSettings.value = { ...defaultSettings }
+  localStorage.removeItem('pro-command-center-settings')
+  connectionStatus.value = null
+  settingsChanged.value = false
+}
+
+const applyTheme = (theme) => {
+  if (theme === 'auto') {
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+    document.documentElement.classList.toggle('dark', prefersDark)
+  } else {
+    document.documentElement.classList.toggle('dark', theme === 'dark')
+  }
+}
+
+const loadSettings = () => {
+  try {
+    const saved = localStorage.getItem('pro-command-center-settings')
+    if (saved) {
+      const parsed = JSON.parse(saved)
+      settings.value = { ...settings.value, ...parsed }
+      tempSettings.value = { ...settings.value }
+      applyTheme(settings.value.theme)
+    }
+  } catch (error) {
+    console.warn('Failed to load settings:', error)
+  }
+}
+
+const toggleApiKeyVisibility = (provider) => {
+  showApiKeys.value[provider] = !showApiKeys.value[provider]
+}
+
+const testConnection = async () => {
+  connectionStatus.value = { success: false, message: 'Testing connection...' }
+  
+  try {
+    const provider = tempSettings.value.aiProvider
+    let testSuccessful = false
+    
+    switch (provider) {
+      case 'openai':
+        if (!tempSettings.value.openaiApiKey) {
+          throw new Error('OpenAI API key is required')
+        }
+        // Test OpenAI connection
+        testSuccessful = await testOpenAIConnection()
+        break
+        
+      case 'claude':
+        if (!tempSettings.value.claudeApiKey) {
+          throw new Error('Claude API key is required')
+        }
+        // Test Claude connection
+        testSuccessful = await testClaudeConnection()
+        break
+        
+      case 'gemini':
+        if (!tempSettings.value.geminiApiKey) {
+          throw new Error('Gemini API key is required')
+        }
+        // Test Gemini connection
+        testSuccessful = await testGeminiConnection()
+        break
+        
+      case 'ollama':
+      case 'ollama-turbo':
+        if (!tempSettings.value.ollamaBaseUrl) {
+          throw new Error('Ollama base URL is required')
+        }
+        // Test Ollama connection
+        testSuccessful = await testOllamaConnection()
+        break
+        
+      default:
+        throw new Error('Unknown provider')
+    }
+    
+    if (testSuccessful) {
+      connectionStatus.value = { 
+        success: true, 
+        message: `${provider.charAt(0).toUpperCase() + provider.slice(1)} connection successful!` 
+      }
+    }
+  } catch (error) {
+    connectionStatus.value = { 
+      success: false, 
+      message: `Connection failed: ${error.message}` 
+    }
+  }
+  
+  // Clear status after 5 seconds
+  setTimeout(() => {
+    connectionStatus.value = null
+  }, 5000)
+}
+
+const testOpenAIConnection = async () => {
+  const response = await fetch('https://api.openai.com/v1/models', {
+    headers: {
+      'Authorization': `Bearer ${tempSettings.value.openaiApiKey}`
+    }
+  })
+  return response.ok
+}
+
+const testClaudeConnection = async () => {
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': tempSettings.value.claudeApiKey,
+      'anthropic-version': '2023-06-01'
+    },
+    body: JSON.stringify({
+      model: 'claude-3-haiku-20240307',
+      max_tokens: 1,
+      messages: [{ role: 'user', content: 'test' }]
+    })
+  })
+  return response.ok || response.status === 400 // 400 is OK, means auth worked
+}
+
+const testGeminiConnection = async () => {
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${tempSettings.value.geminiApiKey}`)
+  return response.ok
+}
+
+const testOllamaConnection = async () => {
+  const response = await fetch(`${tempSettings.value.ollamaBaseUrl}/api/tags`)
+  return response.ok
+}
+
+// Expose methods
+defineExpose({
+  open,
+  close
+})
+</script>
+
+<style scoped>
+/* Smooth transitions */
+.transition-all {
+  transition-property: all;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Custom scrollbar */
+.overflow-y-auto::-webkit-scrollbar {
+  width: 4px;
+}
+
+.overflow-y-auto::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.overflow-y-auto::-webkit-scrollbar-thumb {
+  background: rgba(156, 163, 175, 0.5);
+  border-radius: 2px;
+}
+
+.overflow-y-auto::-webkit-scrollbar-thumb:hover {
+  background: rgba(156, 163, 175, 0.8);
+}
+
+/* Hidden scrollbar for main content area */
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* Internet Explorer 10+ */
+  scrollbar-width: none;  /* Firefox */
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;  /* Safari and Chrome */
+}
+
+/* Backdrop blur */
+.backdrop-blur-sm {
+  backdrop-filter: blur(4px);
+}
+
+.backdrop-blur-xl {
+  backdrop-filter: blur(16px);
+}
+
+/* Focus styles */
+input:focus {
+  outline: none;
+}
+
+/* Mark highlighting */
+:deep(mark) {
+  background-color: rgb(254 240 138);
+  color: rgb(133 77 14);
+  padding: 1px 2px;
+  border-radius: 2px;
+}
+
+/* Animation improvements */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.15s ease-out;
+}
+</style>
