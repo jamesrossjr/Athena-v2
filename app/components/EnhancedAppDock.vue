@@ -238,6 +238,76 @@
           </Transition>
         </div>
 
+        <!-- Workspace Launcher -->
+        <div class="dock-separator" />
+        <div
+          class="dock-item workspace-launcher"
+          @click="toggleWorkspaceMenu"
+          @mouseenter="hoveredApp = { name: 'Workspaces', shortcut: 'Ctrl+W' }"
+          @mouseleave="hoveredApp = null"
+        >
+          <div class="dock-icon">
+            <Icon name="heroicons:view-columns" />
+          </div>
+
+          <!-- Tooltip -->
+          <Transition name="tooltip">
+            <div
+              v-if="hoveredApp?.name === 'Workspaces'"
+              class="dock-tooltip"
+            >
+              Workspaces
+              <span class="shortcut">Ctrl+W</span>
+            </div>
+          </Transition>
+
+          <!-- Workspace Menu -->
+          <Transition name="workspace-menu">
+            <div
+              v-if="showWorkspaceMenu"
+              class="workspace-menu"
+              @click.stop
+            >
+              <div class="menu-header">
+                <Icon name="heroicons:view-columns" />
+                <span>Workspaces</span>
+              </div>
+              
+              <div class="workspace-list">
+                <div
+                  v-for="workspace in savedWorkspaces"
+                  :key="workspace.id"
+                  class="workspace-item"
+                  @click="loadWorkspace(workspace)"
+                >
+                  <Icon name="heroicons:squares-2x2" />
+                  <span class="workspace-name">{{ workspace.name }}</span>
+                  <span class="workspace-count">{{ workspace.windows.length }}</span>
+                </div>
+                
+                <div
+                  v-if="!savedWorkspaces.length"
+                  class="empty-workspaces"
+                >
+                  <Icon name="heroicons:folder-open" />
+                  <span>No saved workspaces</span>
+                </div>
+              </div>
+
+              <div class="menu-actions">
+                <button
+                  class="save-workspace-btn"
+                  :disabled="!hasActiveWindows"
+                  @click="saveCurrentWorkspace"
+                >
+                  <Icon name="heroicons:plus" />
+                  Save Current
+                </button>
+              </div>
+            </div>
+          </Transition>
+        </div>
+
         <!-- App Drawer -->
         <div class="dock-separator" />
         <div
@@ -368,6 +438,10 @@ const pinnedApps = ref([
   { id: 'settings', name: 'Settings', type: 'settings', icon: 'heroicons:cog-6-tooth', shortcut: 'Ctrl+,' }
 ])
 
+// Workspaces
+const savedWorkspaces = ref<any[]>([])
+const showWorkspaceMenu = ref(false)
+
 // Drag state
 const dragState = ref({
   isDragging: false,
@@ -393,6 +467,7 @@ const resizeState = ref({
 
 // Computed
 const hasMinimizedWindows = computed(() => windowManager.dockWindows.value.length > 0)
+const hasActiveWindows = computed(() => windowManager.allWindows.value.some(w => w.state !== 'minimized'))
 
 const snapPreviewStyle = computed(() => {
   const preview = windowManager.snapPreview.value
@@ -559,6 +634,76 @@ const openCommandCenter = () => {
   emit('open-command-center')
 }
 
+// Workspace methods
+const toggleWorkspaceMenu = () => {
+  showWorkspaceMenu.value = !showWorkspaceMenu.value
+  if (showWorkspaceMenu.value) {
+    loadSavedWorkspaces()
+  }
+}
+
+const loadSavedWorkspaces = () => {
+  const saved = localStorage.getItem('workspaces')
+  if (saved) {
+    savedWorkspaces.value = JSON.parse(saved)
+  }
+}
+
+const saveCurrentWorkspace = () => {
+  const name = prompt('Enter workspace name:')
+  if (!name) return
+
+  const activeWindows = windowManager.allWindows.value
+    .filter(w => w.state !== 'minimized')
+    .map(w => ({
+      type: w.type,
+      title: w.title,
+      icon: w.icon,
+      position: w.position,
+      size: w.size,
+      gridPosition: w.gridPosition,
+      lockedTo: w.lockedTo
+    }))
+
+  const workspace = {
+    id: Date.now().toString(),
+    name,
+    windows: activeWindows,
+    createdAt: new Date().toISOString()
+  }
+
+  savedWorkspaces.value.push(workspace)
+  localStorage.setItem('workspaces', JSON.stringify(savedWorkspaces.value))
+  showWorkspaceMenu.value = false
+}
+
+const loadWorkspace = (workspace: any) => {
+  // Close all current windows
+  windowManager.closeAllWindows()
+
+  // Recreate windows from workspace
+  workspace.windows.forEach((w: any) => {
+    const windowConfig: any = {
+      type: w.type,
+      title: w.title,
+      icon: w.icon,
+      position: w.position,
+      size: w.size,
+      gridPosition: w.gridPosition,
+      lockedTo: w.lockedTo
+    }
+
+    // Add component based on type
+    if (w.type === 'settings') {
+      windowConfig.component = SettingsWindow
+    }
+
+    windowManager.createWindow(windowConfig)
+  })
+
+  showWorkspaceMenu.value = false
+}
+
 // Window dragging
 const startDrag = (window: any, event: MouseEvent) => {
   if (window.state === 'maximized' || window.state.includes('snapped')) {
@@ -693,6 +838,12 @@ const handleKeydown = (event: KeyboardEvent) => {
     autoHide.value = !dockVisible.value
   }
 
+  // Ctrl+W to toggle workspace menu
+  if (event.ctrlKey && event.key === 'w') {
+    event.preventDefault()
+    toggleWorkspaceMenu()
+  }
+
   // Alt+Tab to cycle windows
   if (event.altKey && event.key === 'Tab') {
     event.preventDefault()
@@ -715,9 +866,10 @@ const handleSwipe = (event: TouchEvent) => {
   }
 }
 
-// Hide context menu on click outside
+// Hide menus on click outside
 const hideContextMenu = () => {
   contextMenu.value.show = false
+  showWorkspaceMenu.value = false
 }
 
 // Lifecycle
@@ -1099,6 +1251,119 @@ onUnmounted(() => {
   margin-top: 2px;
 }
 
+/* Workspace Menu */
+.workspace-menu {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-bottom: 12px;
+  background: rgba(30, 30, 30, 0.95);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  width: 280px;
+  max-height: 400px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.menu-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  color: white;
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.workspace-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+  max-height: 280px;
+}
+
+.workspace-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  color: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.workspace-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.workspace-name {
+  flex: 1;
+  font-size: 13px;
+}
+
+.workspace-count {
+  font-size: 11px;
+  padding: 2px 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  opacity: 0.7;
+}
+
+.empty-workspaces {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 40px;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 13px;
+}
+
+.empty-workspaces svg {
+  width: 32px;
+  height: 32px;
+  opacity: 0.5;
+}
+
+.menu-actions {
+  padding: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.save-workspace-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: linear-gradient(135deg, #4a90e2, #357abd);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.save-workspace-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(74, 144, 226, 0.3);
+}
+
+.save-workspace-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Context Menu */
 .context-menu {
   position: fixed;
@@ -1241,6 +1506,17 @@ onUnmounted(() => {
 .tooltip-leave-to {
   opacity: 0;
   transform: translateX(-50%) translateY(5px);
+}
+
+.workspace-menu-enter-active,
+.workspace-menu-leave-active {
+  transition: all 0.2s ease;
+}
+
+.workspace-menu-enter-from,
+.workspace-menu-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(10px);
 }
 
 .context-menu-enter-active,
