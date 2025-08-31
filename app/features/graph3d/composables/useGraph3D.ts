@@ -62,6 +62,13 @@ export function useGraph3D() {
     maxNodes: 1000,
     autoLayout: true,
     animationSpeed: 1.0,
+    traversalMode: 'dfs' as 'dfs' | 'bfs',
+    dfsVisualization: {
+      enabled: false,
+      speed: 500, // ms per step
+      showPath: true,
+      highlightVisited: true
+    },
     nodeSize: {
       min: 0.5,
       max: 3.0,
@@ -74,7 +81,10 @@ export function useGraph3D() {
       file: '#f59e0b',
       connection: '#6b7280',
       selected: '#fbbf24',
-      hovered: '#e5e7eb'
+      hovered: '#e5e7eb',
+      visited: '#9333ea',
+      path: '#ef4444',
+      current: '#22c55e'
     }
   })
 
@@ -183,7 +193,7 @@ export function useGraph3D() {
   }
 
   // Workspace Integration Functions
-  const loadWorkspaceData = (workspace: any) => {
+  const loadWorkspaceData = (workspace: { id: string, name?: string, pages?: Array<{ id: string, title: string, blocks?: unknown[] }> }) => {
     console.log('Loading workspace into 3D graph:', workspace)
 
     // Clear existing data
@@ -384,7 +394,195 @@ export function useGraph3D() {
     })
   }
 
-  // Search and Filter
+  // DFS Traversal Functions
+  const dfsTraverse = (startNodeId: string, callback?: (node: Node3D, depth: number, path: string[]) => void): Node3D[] => {
+    const visited = new Set<string>()
+    const result: Node3D[] = []
+    const stack: { id: string, depth: number, path: string[] }[] = []
+    
+    // Initialize with start node
+    stack.push({ id: startNodeId, depth: 0, path: [] })
+    
+    while (stack.length > 0) {
+      const { id, depth, path } = stack.pop()!
+      
+      if (visited.has(id)) continue
+      visited.add(id)
+      
+      const node = nodes.value.find(n => n.id === id)
+      if (!node) continue
+      
+      result.push(node)
+      const currentPath = [...path, id]
+      
+      // Execute callback if provided
+      if (callback) {
+        callback(node, depth, currentPath)
+      }
+      
+      // Add unvisited connections to stack (reverse order for correct DFS)
+      const unvisitedConnections = node.connections
+        .filter(connId => !visited.has(connId))
+        .reverse()
+      
+      for (const connectedId of unvisitedConnections) {
+        stack.push({ 
+          id: connectedId, 
+          depth: depth + 1,
+          path: currentPath
+        })
+      }
+    }
+    
+    return result
+  }
+
+  const dfsPathTo = (startNodeId: string, targetNodeId: string): string[] | null => {
+    const visited = new Set<string>()
+    const stack: { id: string, path: string[] }[] = []
+    
+    stack.push({ id: startNodeId, path: [startNodeId] })
+    
+    while (stack.length > 0) {
+      const { id, path } = stack.pop()!
+      
+      if (id === targetNodeId) {
+        return path
+      }
+      
+      if (visited.has(id)) continue
+      visited.add(id)
+      
+      const node = nodes.value.find(n => n.id === id)
+      if (!node) continue
+      
+      // Add unvisited connections to stack
+      for (const connectedId of node.connections) {
+        if (!visited.has(connectedId)) {
+          stack.push({ 
+            id: connectedId, 
+            path: [...path, connectedId]
+          })
+        }
+      }
+    }
+    
+    return null // No path found
+  }
+
+  const dfsDetectCycles = (): string[][] => {
+    const cycles: string[][] = []
+    const visited = new Set<string>()
+    const recursionStack = new Set<string>()
+    
+    const dfsUtil = (nodeId: string, path: string[]): boolean => {
+      visited.add(nodeId)
+      recursionStack.add(nodeId)
+      
+      const node = nodes.value.find(n => n.id === nodeId)
+      if (!node) return false
+      
+      for (const connectedId of node.connections) {
+        if (!visited.has(connectedId)) {
+          if (dfsUtil(connectedId, [...path, connectedId])) {
+            return true
+          }
+        } else if (recursionStack.has(connectedId)) {
+          // Cycle detected
+          const cycleStartIndex = path.indexOf(connectedId)
+          if (cycleStartIndex !== -1) {
+            cycles.push(path.slice(cycleStartIndex))
+          }
+        }
+      }
+      
+      recursionStack.delete(nodeId)
+      return false
+    }
+    
+    // Check each unvisited node
+    for (const node of nodes.value) {
+      if (!visited.has(node.id)) {
+        dfsUtil(node.id, [node.id])
+      }
+    }
+    
+    return cycles
+  }
+
+  const dfsTopologicalSort = (): Node3D[] | null => {
+    const visited = new Set<string>()
+    const stack: Node3D[] = []
+    const recursionStack = new Set<string>()
+    
+    const dfsUtil = (nodeId: string): boolean => {
+      visited.add(nodeId)
+      recursionStack.add(nodeId)
+      
+      const node = nodes.value.find(n => n.id === nodeId)
+      if (!node) return false
+      
+      for (const connectedId of node.connections) {
+        if (!visited.has(connectedId)) {
+          if (dfsUtil(connectedId)) {
+            return true // Cycle detected
+          }
+        } else if (recursionStack.has(connectedId)) {
+          return true // Cycle detected
+        }
+      }
+      
+      recursionStack.delete(nodeId)
+      stack.push(node)
+      return false
+    }
+    
+    // Visit all nodes
+    for (const node of nodes.value) {
+      if (!visited.has(node.id)) {
+        if (dfsUtil(node.id)) {
+          return null // Graph has cycles, cannot perform topological sort
+        }
+      }
+    }
+    
+    return stack.reverse()
+  }
+
+  const dfsConnectedComponents = (): Node3D[][] => {
+    const visited = new Set<string>()
+    const components: Node3D[][] = []
+    
+    const dfsUtil = (nodeId: string, component: Node3D[]) => {
+      visited.add(nodeId)
+      
+      const node = nodes.value.find(n => n.id === nodeId)
+      if (!node) return
+      
+      component.push(node)
+      
+      for (const connectedId of node.connections) {
+        if (!visited.has(connectedId)) {
+          dfsUtil(connectedId, component)
+        }
+      }
+    }
+    
+    // Find all connected components
+    for (const node of nodes.value) {
+      if (!visited.has(node.id)) {
+        const component: Node3D[] = []
+        dfsUtil(node.id, component)
+        if (component.length > 0) {
+          components.push(component)
+        }
+      }
+    }
+    
+    return components
+  }
+
+  // Search and Filter (keeping original but enhanced)
   const searchNodes = (query: string): Node3D[] => {
     const lowercaseQuery = query.toLowerCase()
     return nodes.value.filter(node =>
@@ -396,29 +594,41 @@ export function useGraph3D() {
     )
   }
 
-  const getConnectedNodes = (nodeId: string, depth: number = 1): Node3D[] => {
-    const visited = new Set<string>()
-    const result: Node3D[] = []
+  const getConnectedNodes = (nodeId: string, depth: number = 1, useDFS: boolean = true): Node3D[] => {
+    if (useDFS) {
+      // Use DFS traversal
+      const result: Node3D[] = []
+      dfsTraverse(nodeId, (node, currentDepth) => {
+        if (currentDepth > 0 && currentDepth <= depth) {
+          result.push(node)
+        }
+      })
+      return result
+    } else {
+      // Original BFS-like implementation
+      const visited = new Set<string>()
+      const result: Node3D[] = []
 
-    const traverse = (currentId: string, currentDepth: number) => {
-      if (currentDepth > depth || visited.has(currentId)) return
+      const traverse = (currentId: string, currentDepth: number) => {
+        if (currentDepth > depth || visited.has(currentId)) return
 
-      visited.add(currentId)
-      const node = nodes.value.find(n => n.id === currentId)
+        visited.add(currentId)
+        const node = nodes.value.find(n => n.id === currentId)
 
-      if (node && currentDepth > 0) {
-        result.push(node)
+        if (node && currentDepth > 0) {
+          result.push(node)
+        }
+
+        if (currentDepth < depth) {
+          node?.connections.forEach((connectedId) => {
+            traverse(connectedId, currentDepth + 1)
+          })
+        }
       }
 
-      if (currentDepth < depth) {
-        node?.connections.forEach((connectedId) => {
-          traverse(connectedId, currentDepth + 1)
-        })
-      }
+      traverse(nodeId, 0)
+      return result
     }
-
-    traverse(nodeId, 0)
-    return result
   }
 
   // Export Functions
@@ -473,6 +683,13 @@ export function useGraph3D() {
     searchNodes,
     getConnectedNodes,
     exportGraphData,
-    importGraphData
+    importGraphData,
+    
+    // DFS Functions
+    dfsTraverse,
+    dfsPathTo,
+    dfsDetectCycles,
+    dfsTopologicalSort,
+    dfsConnectedComponents
   }
 }
