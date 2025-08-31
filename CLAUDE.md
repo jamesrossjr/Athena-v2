@@ -1,0 +1,1 @@
+- please always fix lint issues and typescript issues before finishing work

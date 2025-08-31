@@ -1,5 +1,5 @@
 @import "tailwindcss";
-@import "@nuxt/ui-pro";
+@import "@nuxt/ui";
 
 @theme {
   --font-sans: 'Public Sans', sans-serif;
@@ -46,11 +46,11 @@
 
 /* Canvas custom styles */
 .canvas-text-muted {
-  color: #9ca3af;
+  color: #6b7280;
 }
 
 .canvas-text-gray {
-  color: #6b7280;
+  color: #4b5563;
 }
 
 .canvas-bg-gray-light {

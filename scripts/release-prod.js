@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { execSync } from 'child_process'
-import { readFileSync, writeFileSync } from 'fs'
+import { readFileSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 
@@ -138,12 +138,12 @@ function generateChangelog() {
   try {
     exec('pnpm changelog')
     log('✅ Changelog generated', 'green')
-  } catch (error) {
+  } catch {
     log('⚠️  Changelog generation failed, but continuing...', 'yellow')
   }
 }
 
-function validateDeployment(version) {
+function validateDeployment() {
   log('🔍 Validating deployment...', 'blue')
 
   const checks = [
@@ -218,7 +218,7 @@ function generatePostReleaseInstructions(version) {
 }
 
 function getNextVersion(currentVersion) {
-  const [major, minor, patch] = currentVersion.split('.').map(Number)
+  const [major, minor] = currentVersion.split('.').map(Number)
   return `${major}.${minor + 1}.0`
 }
 
